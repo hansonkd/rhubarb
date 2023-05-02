@@ -10,7 +10,11 @@ from psycopg import AsyncConnection
 
 from rhubarb.connection import connection
 from rhubarb.migrations.data import MigrationStateDatabase
-from rhubarb.migrations.utils import load_migrations, current_migration_state, current_migration_queue
+from rhubarb.migrations.utils import (
+    load_migrations,
+    current_migration_state,
+    current_migration_queue,
+)
 from rhubarb.migrations.models import migration_was_applied, mark_migration_as_applied
 
 
@@ -38,9 +42,15 @@ async def run_migrations(migration_dir="./migrations", check=False) -> bool:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog='rhubarb.migrations.make',
-        description='Make new migrations based on the state of your program\'s tables')
-    parser.add_argument('-c', '--check', action='store_true', help="Run the command but don't save the file. Return code reflects if a migration would have been made.")
+        prog="rhubarb.migrations.make",
+        description="Make new migrations based on the state of your program's tables",
+    )
+    parser.add_argument(
+        "-c",
+        "--check",
+        action="store_true",
+        help="Run the command but don't save the file. Return code reflects if a migration would have been made.",
+    )
     args = parser.parse_args()
 
     program_result = asyncio.run(run_migrations(check=args.check))

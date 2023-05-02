@@ -12,7 +12,6 @@ from typing import Self, Optional
 
 import pytest
 import strawberry
-from psycopg.rows import dict_row
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 
@@ -21,8 +20,28 @@ from rhubarb.crud import delete, save, insert_objs, update, query
 from rhubarb.extension import RhubarbExtension
 from rhubarb.migrations.utils import reset_db_and_fast_forward
 from rhubarb.model import BaseUpdatedAtModel
-from rhubarb.object_set import ModelSelector, ModelUpdater, ObjectSet, column, sum_agg, Aggregate, relation, table, \
-    virtual_column, python_field, Registry, field, avg_agg, max_agg, concat, case, Value
+from rhubarb.functions import (
+    avg_agg,
+    concat,
+    case,
+)
+from rhubarb.object_set import (
+    ModelSelector,
+    ModelUpdater,
+    ObjectSet,
+    column,
+    relation,
+    table,
+    virtual_column,
+    python_field,
+    Registry,
+    field,
+    Value,
+    Constraint,
+    Index,
+    References,
+    references,
+)
 
 
 @pytest_asyncio.fixture
@@ -41,7 +60,8 @@ async def created_tables(postgres_connection):
     mm1 = str(uuid.uuid4())
     mm2 = str(uuid.uuid4())
 
-    await postgres_connection.execute(f"""
+    await postgres_connection.execute(
+        f"""
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
     DROP TABLE IF EXISTS ratings_model;
@@ -69,7 +89,8 @@ async def created_tables(postgres_connection):
     INSERT INTO ratings_model(id, rating) VALUES ('{r1}'::UUID, 1), ('{r2}'::UUID, 5);
     INSERT INTO other_model(id, name, rating_id) VALUES ('{om1}'::UUID, 'm1', '{r1}'::UUID), ('{om2}'::UUID, 'm2', '{r2}'::UUID);
     INSERT INTO my_model(id, parent_id) VALUES ('{mm1}'::UUID, '{om1}'::UUID), ('{mm2}'::UUID, '{om2}'::UUID);
-    """)
+    """
+    )
 
 
 @pytest.fixture
@@ -94,10 +115,7 @@ async def basic_data(postgres_connection, run_migrations):
     reviewers = await insert_objs(
         Reviewer,
         conn,
-        [
-            Reviewer(name="Jane Jones"),
-            Reviewer(name="Jo Bob")
-        ],
+        [Reviewer(name="Jane Jones"), Reviewer(name="Jo Bob")],
         returning=True,
     ).execute()
 
@@ -116,10 +134,26 @@ async def basic_data(postgres_connection, run_migrations):
         Book,
         conn,
         [
-            Book(title="Python for Dummies", author_id=authors[0].id, published_on=datetime.date(2023, 9, 3)),
-            Book(title="How to GQL", author_id=authors[1].id, published_on=datetime.date(2023, 1, 4)),
-            Book(title="What is GQL", author_id=authors[1].id, published_on=datetime.date(2021, 8, 22)),
-            Book(title="How to find Happiness in Python", author_id=authors[2].id, published_on=datetime.date(2022, 3, 14)),
+            Book(
+                title="Python for Dummies",
+                author_id=authors[0].id,
+                published_on=datetime.date(2023, 9, 3),
+            ),
+            Book(
+                title="How to GQL",
+                author_id=authors[1].id,
+                published_on=datetime.date(2023, 1, 4),
+            ),
+            Book(
+                title="What is GQL",
+                author_id=authors[1].id,
+                published_on=datetime.date(2021, 8, 22),
+            ),
+            Book(
+                title="How to find Happiness in Python",
+                author_id=authors[2].id,
+                published_on=datetime.date(2022, 3, 14),
+            ),
         ],
         returning=True,
     ).execute()
@@ -128,7 +162,11 @@ async def basic_data(postgres_connection, run_migrations):
     for reviewer in reviewers:
         for book in books:
             ratings_to_insert.append(
-                RatingModel(book_id=book.id, reviewer_id=reviewer.id, rating=random.randint(1, 10))
+                RatingModel(
+                    book_id=book.id,
+                    reviewer_id=reviewer.id,
+                    rating=random.randint(1, 10),
+                )
             )
 
     ratings = await insert_objs(
@@ -142,7 +180,7 @@ async def basic_data(postgres_connection, run_migrations):
         "books": books,
         "ratings": ratings,
         "authors": authors,
-        "reviewers": reviewers
+        "reviewers": reviewers,
     }
 
 
@@ -156,19 +194,80 @@ class Reviewer(BaseUpdatedAtModel):
 
 
 @table(registry=testing_registry)
+class Author(BaseUpdatedAtModel):
+    __table__ = "authors"
+    name: str = column()
+
+    @relation(graphql_type=list["Book"])
+    def books(self, book: "Book"):
+        return self.id == book.author_id
+
+    @field(graphql_type=list["RatingModel"])
+    def ratings(self):
+        return self.books().select(lambda book: book.ratings())
+
+
+@table(registry=testing_registry)
+class Book(BaseUpdatedAtModel):
+    __table__ = "books"
+    title: str = column()
+    comments: Optional[str] = column(default="null")
+    author_id: uuid.UUID = references(Author.__table__)
+    published_on: datetime.date = column()
+
+    @relation
+    def author(self, author: Author):
+        return self.author_id == author.id
+
+    @relation(graphql_type=list["RatingModel"])
+    def ratings(self, rating: "RatingModel"):
+        return self.id == rating.book_id
+
+    @relation(graphql_type="RatingsByBook")
+    def ratings_by_book(self, rating: "RatingsByBook"):
+        return self.id == rating.book_id
+
+    @virtual_column
+    def avg_rating_embedded(self) -> int:
+        return self.ratings_by_book().avg_rating()
+
+    @virtual_column
+    def parent_rating(self: ModelSelector) -> "SomeResult":
+        return SomeResult(ok=True, author_model=self.author)
+
+    @virtual_column
+    def author_name(self) -> str:
+        return self.author().name
+
+    @python_field(
+        depends_on=lambda root: {"title": root.title, "author_name": root.author().name}
+    )
+    def title_and_author(self, title: str, author_name: str) -> str:
+        return f"{title} by {author_name}"
+
+    @python_field(
+        depends_on=lambda root: {"title": root.title, "author_name": root.author().name}
+    )
+    async def async_title_and_author(self, title: str, author_name: str) -> str:
+        return f"{title} by {author_name}"
+
+
+@table(registry=testing_registry)
 class RatingModel(BaseUpdatedAtModel):
     __table__ = "ratings_model"
     rating: int = column()
-    book_id: uuid.UUID = column()
-    reviewer_id: uuid.UUID = column()
+    book_id: uuid.UUID = column(
+        references=References(Book.__table__, on_delete="CASCADE")
+    )
+    reviewer_id: uuid.UUID = column(references=References(Reviewer.__table__))
     published_on: datetime.datetime = column(insert_default="now()")
 
     @relation
-    def book(self, om: "Book"):
+    def book(self, om: Book):
         return self.book_id == om.id
 
     @relation
-    def reviewer(self, om: "Reviewer"):
+    def reviewer(self, om: Reviewer):
         return self.reviewer_id == om.id
 
     @column(virtual=True)
@@ -181,8 +280,14 @@ class RatingModel(BaseUpdatedAtModel):
             (self.rating == 0, Value("Bad")),
             (self.rating < 5, Value("Poor")),
             (self.rating < 7, Value("Good")),
-            default=Value("Excellent")
+            default=Value("Excellent"),
         )
+
+    def __constraints__(self: ModelSelector):
+        return {"rating_positive": Constraint(check=self.rating >= 0)}
+
+    def __indexes__(self: ModelSelector):
+        return {"rating_idx": Index(on=self.rating)}
 
 
 @table(registry=None)
@@ -197,65 +302,10 @@ class RatingsByBook(RatingModel):
         return self.book_id
 
 
-@table(registry=testing_registry)
-class Author(BaseUpdatedAtModel):
-    __table__ = "authors"
-    name: str = column()
-
-    @relation(graphql_type=list["Book"])
-    def books(self, book: "Book"):
-        return self.id == book.author_id
-
-    @field(graphql_type=list[RatingModel])
-    def ratings(self):
-        return self.books().select(lambda book: book.ratings())
-
-
 @strawberry.type
 class SomeResult:
     ok: bool
     author_model: Author
-
-
-@table(registry=testing_registry)
-class Book(BaseUpdatedAtModel):
-    __table__ = "books"
-    title: str = column()
-    comments: Optional[str] = column(default="null")
-    author_id: uuid.UUID = column()
-    published_on: datetime.date = column()
-
-    @relation
-    def author(self, author: Author):
-        return self.author_id == author.id
-
-    @relation(graphql_type=list[RatingModel])
-    def ratings(self, rating: RatingModel):
-        return self.id == rating.book_id
-
-    @relation(graphql_type=RatingsByBook)
-    def ratings_by_book(self, rating: RatingsByBook):
-        return self.id == rating.book_id
-
-    @virtual_column
-    def avg_rating_embedded(self) -> int:
-        return self.ratings_by_book().avg_rating()
-
-    @virtual_column
-    def parent_rating(self: ModelSelector) -> SomeResult:
-        return SomeResult(ok=True, author_model=self.author)
-
-    @virtual_column
-    def author_name(self) -> str:
-        return self.author().name
-
-    @python_field(depends_on=lambda root: {"title": root.title, "author_name": root.author().name})
-    def title_and_author(self, title: str, author_name: str) -> str:
-        return f"{title} by {author_name}"
-
-    @python_field(depends_on=lambda root: {"title": root.title, "author_name": root.author().name})
-    async def async_title_and_author(self, title: str, author_name: str) -> str:
-        return f"{title} by {author_name}"
 
 
 @strawberry.type
@@ -265,7 +315,9 @@ class Query:
         return query(Book, get_conn(info), info)
 
     @strawberry.field(graphql_type=list[RatingModel])
-    def all_ratings(self, info: Info) -> ObjectSet[RatingModel, ModelSelector[RatingModel]]:
+    def all_ratings(
+        self, info: Info
+    ) -> ObjectSet[RatingModel, ModelSelector[RatingModel]]:
         return query(RatingModel, get_conn(info), info)
 
     @strawberry.field(graphql_type=list[RatingsByBook])
@@ -285,27 +337,31 @@ class Mutation:
     def update_titles(self, info: Info, book_id: uuid.UUID, new_title: str) -> Book:
         def do(book: ModelUpdater[Book]):
             # With Update expressions, we can use computations and reference sql fields and joins.
-            book.title = concat(new_title, "(Old Title: ", book.title, ", by: ", book.author().name, ")")
+            book.title = concat(
+                new_title, "(Old Title: ", book.title, ", by: ", book.author().name, ")"
+            )
 
         def where(book: ModelSelector[Book]):
             return book.id == book_id
 
-        return update(
-            Book, get_conn(info), do, where, info=info, one=True
-        )
+        return update(Book, get_conn(info), do, where, info=info, one=True)
 
     @strawberry.mutation
-    async def new_review(self, info: Info, book_id: uuid.UUID, reviewer_id: uuid.UUID, rating: int) -> RatingModel:
+    async def new_review(
+        self, info: Info, book_id: uuid.UUID, reviewer_id: uuid.UUID, rating: int
+    ) -> RatingModel:
         return insert_objs(
             RatingModel,
             get_conn(info),
             [RatingModel(book_id=book_id, reviewer_id=reviewer_id, rating=rating)],
             info=info,
-            one=True
+            one=True,
         )
 
     @strawberry.mutation
-    async def nested_new_review(self, info: Info, book_id: uuid.UUID, reviewer_id: uuid.UUID, rating: int) -> SomeRatingResult:
+    async def nested_new_review(
+        self, info: Info, book_id: uuid.UUID, reviewer_id: uuid.UUID, rating: int
+    ) -> SomeRatingResult:
         if rating < 1:
             return SomeRatingResult(ok=False)
         else:
@@ -314,15 +370,25 @@ class Mutation:
                 rating=insert_objs(
                     RatingModel,
                     get_conn(info),
-                    [RatingModel(book_id=book_id, reviewer_id=reviewer_id, rating=rating)],
+                    [
+                        RatingModel(
+                            book_id=book_id, reviewer_id=reviewer_id, rating=rating
+                        )
+                    ],
                     info=info,
-                    one=True
-                )
+                    one=True,
+                ),
             )
 
     @strawberry.mutation
-    async def update_title(self, info: Info, book_id: uuid.UUID, new_title: str) -> Book:
-        obj = await query(Book, get_conn(info)).where(lambda book: book.id == book_id).one()
+    async def update_title(
+        self, info: Info, book_id: uuid.UUID, new_title: str
+    ) -> Book:
+        obj = (
+            await query(Book, get_conn(info))
+            .where(lambda book: book.id == book_id)
+            .one()
+        )
         obj.title = new_title
         return await save(obj, get_conn(info), info=info)
 
@@ -340,7 +406,7 @@ class Schema(strawberry.Schema):
     def process_errors(
         self,
         errors,
-        execution_context = None,
+        execution_context=None,
     ) -> None:
         super().process_errors(errors, execution_context)
 
@@ -348,5 +414,3 @@ class Schema(strawberry.Schema):
             err = getattr(error, "original_error")
             if err:
                 raise err
-
-

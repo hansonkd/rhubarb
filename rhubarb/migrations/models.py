@@ -29,7 +29,9 @@ async def migration_was_applied(conn: AsyncConnection, migration_id: str) -> boo
     return os is not None
 
 
-async def mark_migration_as_applied(conn: AsyncConnection, migration_id: str) -> AppliedMigration:
+async def mark_migration_as_applied(
+    conn: AsyncConnection, migration_id: str
+) -> AppliedMigration:
     return await insert_objs(
         AppliedMigration, conn, [AppliedMigration(migration_id=migration_id)]
     ).execute(one=True)

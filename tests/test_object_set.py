@@ -41,7 +41,10 @@ async def test_books_author(schema, postgres_connection, basic_data):
             assert book["author"]["name"]
             assert book["author_name"] == book["author"]["name"]
             assert book["title_and_author"] == book["async_title_and_author"]
-            assert book["async_title_and_author"] == f"{book['title']} by {book['author_name']}"
+            assert (
+                book["async_title_and_author"]
+                == f"{book['title']} by {book['author_name']}"
+            )
 
 
 @pytest.mark.asyncio
@@ -54,8 +57,6 @@ async def test_reviews(schema, postgres_connection, basic_data):
             context_value={"conn": conn},
         )
         assert res.errors is None
-        for query in tracker.queries:
-            print(query)
         assert len(tracker.queries) == 2
         assert len(res.data["all_books"]) == 4
         for book in res.data["all_books"]:
@@ -65,8 +66,6 @@ async def test_reviews(schema, postgres_connection, basic_data):
                 assert rating["reviewer"]
                 assert rating["reviewer"]["name"]
                 assert rating["rating"]
-
-
 
 
 @pytest.mark.asyncio
@@ -79,8 +78,6 @@ async def test_aggregations_at_top_level(schema, postgres_connection, basic_data
             context_value={"conn": conn},
         )
         assert res.errors is None
-        for query in tracker.queries:
-            print(query)
         assert len(tracker.queries) == 1
         assert len(res.data["agg"]) == 4
         for book in res.data["agg"]:
@@ -98,8 +95,6 @@ async def test_aggregations_embedded(schema, postgres_connection, basic_data):
             context_value={"conn": conn},
         )
         assert res.errors is None
-        for query in tracker.queries:
-            print(query)
         assert len(tracker.queries) == 1
         assert len(res.data["all_books"]) == 4
         for book in res.data["all_books"]:
@@ -117,8 +112,6 @@ async def test_aggregations_compared(schema, postgres_connection, basic_data):
             context_value={"conn": conn},
         )
         assert res.errors is None
-        for query in tracker.queries:
-            print(query)
         assert len(tracker.queries) == 3
         assert len(res.data["all_books"]) == 4
 
@@ -135,7 +128,9 @@ async def test_aggregations_compared(schema, postgres_connection, basic_data):
         for book in res.data["agg"]:
             assert book["book_id"]
             assert book["avg_rating"] == first_values[book["book_id"]]
-            assert book["avg_rating"] == int(sum(book_ratings[book["book_id"]]) / len(book_ratings[book["book_id"]]))
+            assert book["avg_rating"] == int(
+                sum(book_ratings[book["book_id"]]) / len(book_ratings[book["book_id"]])
+            )
 
 
 @pytest.mark.asyncio
@@ -169,8 +164,8 @@ async def test_book_mutation(schema, postgres_connection, basic_data):
             context_value={"conn": conn},
             variable_values={
                 "book_id": str(first_book.id),
-                "new_title": "Awesome title"
-            }
+                "new_title": "Awesome title",
+            },
         )
         assert res.errors is None
         assert len(tracker.queries) == 2
@@ -190,8 +185,8 @@ async def test_book_mutation_save(schema, postgres_connection, basic_data):
             context_value={"conn": conn},
             variable_values={
                 "book_id": str(first_book.id),
-                "new_title": "Awesome title"
-            }
+                "new_title": "Awesome title",
+            },
         )
         assert res.errors is None
         assert len(tracker.queries) == 3
@@ -213,8 +208,8 @@ async def test_insert_mutation(schema, postgres_connection, basic_data):
             variable_values={
                 "book_id": str(first_book.id),
                 "reviewer_id": str(reviewer.id),
-                "rating": 11
-            }
+                "rating": 11,
+            },
         )
         assert res.errors is None
         assert len(tracker.queries) == 2
@@ -237,15 +232,17 @@ async def test_nested_insert_mutation(schema, postgres_connection, basic_data):
             variable_values={
                 "book_id": str(first_book.id),
                 "reviewer_id": str(reviewer.id),
-                "rating": 11
-            }
+                "rating": 11,
+            },
         )
         assert res.errors is None
         assert len(tracker.queries) == 2
         assert res.data["nested_new_review"]
         assert res.data["nested_new_review"]["ok"]
         assert res.data["nested_new_review"]["rating"]["rating"] == 11
-        assert res.data["nested_new_review"]["rating"]["reviewer"]["id"] == str(reviewer.id)
+        assert res.data["nested_new_review"]["rating"]["reviewer"]["id"] == str(
+            reviewer.id
+        )
 
 
 @pytest.mark.asyncio
@@ -262,8 +259,8 @@ async def test_nested_insert_mutation_fail(schema, postgres_connection, basic_da
             variable_values={
                 "book_id": str(first_book.id),
                 "reviewer_id": str(reviewer.id),
-                "rating": 0
-            }
+                "rating": 0,
+            },
         )
         assert res.errors is None
         assert len(tracker.queries) == 0
@@ -284,7 +281,7 @@ async def test_delete(schema, postgres_connection, basic_data):
             context_value={"conn": conn},
             variable_values={
                 "book_id": str(first_book.id),
-            }
+            },
         )
         assert res.errors is None
         assert len(tracker.queries) == 1
@@ -292,8 +289,7 @@ async def test_delete(schema, postgres_connection, basic_data):
         assert res.data["delete_book"]["id"] == str(first_book.id)
 
     res = await schema.execute(
-        "query { all_books { id }}",
-        context_value={"conn": conn}
+        "query { all_books { id }}", context_value={"conn": conn}
     )
     assert res.errors is None
     assert res.data["all_books"]
@@ -311,8 +307,6 @@ async def test_case(schema, postgres_connection, basic_data):
             context_value={"conn": conn},
         )
         assert res.errors is None
-        for query in tracker.queries:
-            print(query)
         assert len(tracker.queries) == 1
         for rating in res.data["all_ratings"]:
             assert rating["case_computation"]

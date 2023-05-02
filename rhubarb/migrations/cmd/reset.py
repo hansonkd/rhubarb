@@ -6,7 +6,11 @@ import sys
 from pathlib import Path
 
 from rhubarb.connection import connection
-from rhubarb.migrations.utils import current_migration_state, load_migrations, drop_tables_in_state
+from rhubarb.migrations.utils import (
+    current_migration_state,
+    load_migrations,
+    drop_tables_in_state,
+)
 
 
 async def drop_tables(migration_dir="./migrations", check=False):
@@ -20,9 +24,15 @@ async def drop_tables(migration_dir="./migrations", check=False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog='rhubarb.migrations.cmd.reset',
-        description='Drop all tables in the current migration state.')
-    parser.add_argument('-c', '--check', action='store_true', help="Run the command but don't save the file. Return code reflects if a migration would have been made.")
+        prog="rhubarb.migrations.cmd.reset",
+        description="Drop all tables in the current migration state.",
+    )
+    parser.add_argument(
+        "-c",
+        "--check",
+        action="store_true",
+        help="Run the command but don't save the file. Return code reflects if a migration would have been made.",
+    )
     args = parser.parse_args()
 
     program_result = asyncio.run(drop_tables(check=args.check))

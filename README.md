@@ -108,9 +108,6 @@ class Pet(BaseModel):
 
 @table(registry=None)
 class PetByOwner(Pet):
-    name: str = column()
-    owner_id: str = column()
-    
     @virtual_column
     def avg_weight(self) -> float:
         return avg_agg(self.weight_lbs)
@@ -194,7 +191,7 @@ class Person(BaseModel):
 
 # Migrations
 
-Rhubarb has basic support for migrations. It will watch for 
+Rhubarb has basic support for migrations. It will watch for new, changed columns and tables.
 
 ## Migration Commands
 Make migrations with:
@@ -231,12 +228,19 @@ class Person(BaseModel):
     
     def __indexes__(self):
         return {
-            "by_last_name_comma_first": concat(self.last_name, ",", self.first_name) 
+            "by_last_name_comma_first": Index(
+                on=concat(self.last_name, ",", self.first_name)
+            ),
+            "by_favorite_number": Index(
+                on=self.favorite_number
+            )
         }
 
     def __constraints__(self):
         return {
-            "favorite_ne_least_favorite": self.favorite_number != self.last_favorite_number 
+            "favorite_ne_least_favorite": Constraint(
+                check=self.favorite_number != self.last_favorite_number
+            )
         }
 ```
 

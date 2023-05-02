@@ -5,11 +5,17 @@ import sys
 from pathlib import Path
 
 from rhubarb.migrations.data import MigrationStateDatabase
-from rhubarb.migrations.utils import generate_migration_file, current_migration_state, load_migrations
+from rhubarb.migrations.utils import (
+    generate_migration_file,
+    current_migration_state,
+    load_migrations,
+)
 from rhubarb.object_set import Registry
 
 
-def make_migration(migration_dir="./migrations", check=False, empty=False, registry: Registry = None) -> bool:
+def make_migration(
+    migration_dir="./migrations", check=False, empty=False, registry: Registry = None
+) -> bool:
     migration_dir = Path(migration_dir)
     head_migrations, current_migrations = load_migrations(migration_dir)
     old_state = current_migration_state(head_migrations, current_migrations)
@@ -36,10 +42,21 @@ def make_migration(migration_dir="./migrations", check=False, empty=False, regis
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog='rhubarb.migrations.cmd.make',
-        description='Make new migrations based on the state of your program\'s tables')
-    parser.add_argument('-c', '--check', action='store_true', help="Run the command but don't save the file. Return code reflects if a migration would have been made.")
-    parser.add_argument('-e', '--empty', action='store_true', help="Create an empty migration file if there are no changes")
+        prog="rhubarb.migrations.cmd.make",
+        description="Make new migrations based on the state of your program's tables",
+    )
+    parser.add_argument(
+        "-c",
+        "--check",
+        action="store_true",
+        help="Run the command but don't save the file. Return code reflects if a migration would have been made.",
+    )
+    parser.add_argument(
+        "-e",
+        "--empty",
+        action="store_true",
+        help="Create an empty migration file if there are no changes",
+    )
     args = parser.parse_args()
 
     logging.info(f"Running {parser.prog}")

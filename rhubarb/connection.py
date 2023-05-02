@@ -1,4 +1,5 @@
 import dataclasses
+import logging
 from collections import deque
 from contextlib import asynccontextmanager, contextmanager
 from typing import Optional, Protocol, ContextManager
@@ -43,12 +44,12 @@ class LocalQueryListeners:
         del self.listeners[listener_id]
 
     def new_query(self, query, params, duration_ns):
+        logging.debug(f"[QUERY] {query}")
         for listener in self.listeners.values():
             listener.new_query(query, params, duration_ns)
 
 
 local_queries = LocalQueryListeners()
-
 
 
 @contextmanager
@@ -92,7 +93,6 @@ class AsyncCursorWithStats(AsyncCursor):
         prepare: Optional[bool] = None,
         binary: bool = False,
     ) -> AsyncCursor[Row]:
-
         start_ns = time.perf_counter_ns()
         result = await super().execute(query, params, prepare=prepare, binary=binary)
         end_ns = time.perf_counter_ns()
@@ -103,6 +103,6 @@ class AsyncCursorWithStats(AsyncCursor):
 @asynccontextmanager
 async def connection(*args, **kwds):
     async with await AsyncConnectionWithStats.connect(
-            host="localhost", dbname="debug", password="debug", user="debug"
+        host="localhost", dbname="debug", password="debug", user="debug"
     ) as conn:
         yield conn

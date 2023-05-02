@@ -55,10 +55,7 @@ SQLValue = Union[
 
 T = TypeVar("T", bound=SupportsSqlModel)
 J = TypeVar("J", bound=SupportsSqlModel)
-V = TypeVar(
-    "V",
-    bound=SQLValue
-)
+V = TypeVar("V", bound=SQLValue)
 
 
 class Unset:
@@ -80,5 +77,3 @@ def call_with_maybe_info(f, obj, info):
         return f(obj)
     else:
         return f(obj, info)
-
-

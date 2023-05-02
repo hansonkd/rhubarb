@@ -8,8 +8,18 @@ from typing import Iterator
 
 from psycopg import AsyncConnection
 
-from rhubarb.migrations.data import MigrationStateDatabase, Migration, AlterTable, MigrationOperation, DropColumn, \
-    CreateColumn, RenameTable, DropTable, CreateTable, SetMeta
+from rhubarb.migrations.data import (
+    MigrationStateDatabase,
+    Migration,
+    AlterTable,
+    MigrationOperation,
+    DropColumn,
+    CreateColumn,
+    RenameTable,
+    DropTable,
+    CreateTable,
+    SetMeta,
+)
 
 from rhubarb.errors import RhubarbException
 from rhubarb.object_set import Registry
@@ -28,8 +38,9 @@ def find_diffs(
         yield SetMeta(new_meta_kvs=new_meta_kvs)
 
     new_tables_keys = new_state.tables.keys() - old_state.tables.keys()
-    for table_name in new_tables_keys:
-        table_to_create = new_state.tables[table_name]
+    for table_name, table_to_create in new_state.tables.items():
+        if table_name not in new_tables_keys:
+            continue
         yield CreateTable(
             schema=table_to_create.schema,
             name=table_to_create.name,
@@ -43,6 +54,7 @@ def find_diffs(
                     type=c.type,
                     python_name=c.python_name,
                     default=c.default,
+                    references=c.references,
                 )
                 for c in table_to_create.columns.values()
             ],
@@ -79,6 +91,7 @@ def find_diffs(
                     type=column_to_create.type,
                     python_name=column_to_create.python_name,
                     default=column_to_create.default,
+                    references=column_to_create.references,
                 )
             )
 

@@ -5,11 +5,24 @@ from psycopg import AsyncConnection
 from strawberry.types import Info
 
 from rhubarb.core import default_function_to_python, T, V, call_with_maybe_info, Unset
-from rhubarb.object_set import InsertSet, columns, ModelSelector, Selector, ObjectSet, pk_column_names, ColumnField, \
-    pk_concrete, UpdateSet, DeleteSet, ModelUpdater
+from rhubarb.object_set import (
+    InsertSet,
+    columns,
+    ModelSelector,
+    Selector,
+    ObjectSet,
+    pk_column_names,
+    ColumnField,
+    pk_concrete,
+    UpdateSet,
+    DeleteSet,
+    ModelUpdater,
+)
 
 
-def query(m: Type[T], conn: AsyncConnection, info: Info = None) -> ObjectSet[T, ModelSelector[T]]:
+def query(
+    m: Type[T], conn: AsyncConnection, info: Info = None
+) -> ObjectSet[T, ModelSelector[T]]:
     return ObjectSet(m, conn=conn, info=info)
 
 
@@ -24,7 +37,9 @@ def delete(
     object_set = ObjectSet(model, conn=conn, fields=selected_fields)
     model_reference = object_set.model_reference
     model_selector = object_set.model_selector
-    where_selector, returning_selector = build_where_and_returning(model, model_selector, info, where, returning)
+    where_selector, returning_selector = build_where_and_returning(
+        model, model_selector, info, where, returning
+    )
     return DeleteSet(
         model_reference,
         conn=conn,
@@ -79,11 +94,20 @@ def update(
     model_selector = object_set.model_selector
     model_updater = ModelUpdater(model_selector)
     set_fn(model_updater)
-    where_selector, returning_selector = build_where_and_returning(model, model_selector, info, where, returning)
+    where_selector, returning_selector = build_where_and_returning(
+        model, model_selector, info, where, returning
+    )
 
     setters = model_updater._setters
     return build_update_set(
-        info, conn, model, model_reference, setters, where_selector, returning_selector, one
+        info,
+        conn,
+        model,
+        model_reference,
+        setters,
+        where_selector,
+        returning_selector,
+        one,
     )
 
 
@@ -107,7 +131,14 @@ async def save(obj: T, conn: AsyncConnection, info: Info | None = None):
     if hasattr(model, "__where__"):
         where_selector = call_with_maybe_info(model.__where__, model_selector, info)
     return build_update_set(
-        info, conn, model, model_reference, setters, where_selector, model_selector, one=True
+        info,
+        conn,
+        model,
+        model_reference,
+        setters,
+        where_selector,
+        model_selector,
+        one=True,
     )
 
 
@@ -125,12 +156,28 @@ def insert(
     insert_columns = cols_fn(model_selector)
     values = values_fn(model_selector)
     return build_insert_set(
-        info, conn, model, model_reference, model_selector, insert_columns, values, returning, one=True
+        info,
+        conn,
+        model,
+        model_reference,
+        model_selector,
+        insert_columns,
+        values,
+        returning,
+        one=True,
     )
 
 
 def build_insert_set(
-    info, conn, model, model_reference, model_selector, insert_columns, values, returning, one
+    info,
+    conn,
+    model,
+    model_reference,
+    model_selector,
+    insert_columns,
+    values,
+    returning,
+    one,
 ):
     returning_selector = None
     if returning is not None:
@@ -187,5 +234,5 @@ def insert_objs(
         insert_columns,
         insert_values,
         returning,
-        one
+        one,
     )

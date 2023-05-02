@@ -4,7 +4,21 @@ import json
 import pprint
 from typing import Callable, Type, Any, Awaitable, Optional
 from rhubarb.core import SupportsSqlModel, T, UNSET, DEFAULT_SQL_FUNCTION, Unset
-from rhubarb.object_set import SQLBuilder, SqlType, DEFAULT_REGISTRY, ColumnField, column, columns, pk_column_names
+from rhubarb.errors import RhubarbException
+from rhubarb.object_set import (
+    SQLBuilder,
+    SqlType,
+    DEFAULT_REGISTRY,
+    ColumnField,
+    column,
+    columns,
+    pk_column_names,
+    Index,
+    Constraint,
+    ModelSelector,
+    ObjectSet,
+    References,
+)
 from rhubarb.object_set import table as table_decorator
 import dataclasses
 from psycopg import AsyncConnection
@@ -16,12 +30,14 @@ class MigrationStateColumn:
     python_name: str
     type: SqlType
     default: DEFAULT_SQL_FUNCTION | None = None
+    references: References | None = None
 
     def as_column_field(self) -> ColumnField:
         return column(
             virtual=False,
             column_name=self.name,
             python_name=self.python_name,
+            references=self.references,
         )
 
 
@@ -32,13 +48,17 @@ class MigrationStateTable:
     class_name: str
     primary_key: tuple[str, ...]
     columns: dict[str, MigrationStateColumn]
-    constraints: dict[str, str] = dataclasses.field(default_factory=dict)
-    indexes: dict[str, "Index"] = dataclasses.field(default_factory=dict)
+    constraints: dict[str, "MigrationConstraint"] = dataclasses.field(
+        default_factory=dict
+    )
+    indexes: dict[str, "MigrationIndex"] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass
 class MigrationStateDatabase:
-    tables: dict[(str, str), MigrationStateTable] = dataclasses.field(default_factory=dict)
+    tables: dict[(str, str), MigrationStateTable] = dataclasses.field(
+        default_factory=dict
+    )
     meta: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     @classmethod
@@ -73,18 +93,43 @@ def state_from_table(m: Type[T]):
             type=column_field.column_type,
             default=default,
             python_name=column_field.python_name,
+            references=column_field.references,
         )
     pk = tuple(pk_column_names(m))
     schema = m.__schema__
     name = m.__table__
     pks = ", ".join(pk)
-    constraints = {f"{name}_pk": f"PRIMARY KEY ({pks})"}
+    constraints = {
+        f"{name}_pk": MigrationConstraint(check=f"({pks})", primary_key=True)
+    }
+    if hasattr(m, "__constraints__"):
+        os = ObjectSet(m, None)
+        additional_constraints = m.__constraints__(os.model_selector)
+        for k, v in additional_constraints.items():
+            if not isinstance(v, Constraint):
+                raise RhubarbException(
+                    f"__constraints__ should return a dict[str, Constraint]. Got {v}"
+                )
+            constraints.setdefault(k, MigrationConstraint.from_constraint(v))
+
+    indexes = {}
+    if hasattr(m, "__indexes__"):
+        os = ObjectSet(m, None)
+        additional_indexes = m.__indexes__(os.model_selector)
+        for k, v in additional_indexes.items():
+            if not isinstance(v, Index):
+                raise RhubarbException(
+                    f"__indexes__ should return a dict[str, Index]. Got {v}"
+                )
+            indexes.setdefault(k, MigrationIndex.from_index(v))
+
     return MigrationStateTable(
         schema=schema,
         name=name,
         primary_key=pk,
         columns=cols,
         class_name=m.__name__,
+        indexes=indexes,
         constraints=constraints,
     )
 
@@ -131,6 +176,7 @@ class CreateColumn(AlterOperation):
     python_name: str
     type: SqlType
     default: DEFAULT_SQL_FUNCTION | None = None
+    references: References = None
 
     def __sql__(self, builder: SQLBuilder):
         builder.write(f"ADD COLUMN {self.name} {self.type.raw_sql}")
@@ -141,6 +187,12 @@ class CreateColumn(AlterOperation):
 
         if self.default:
             builder.write(f" DEFAULT {self.default}")
+
+        if self.references:
+            builder.write(f" REFERENCES {self.references.real_table_name}")
+
+            if self.references.on_delete:
+                builder.write(f" ON DELETE {self.references.on_delete}")
 
     def alter(self, table: MigrationStateTable) -> MigrationStateTable:
         table.columns[self.name] = MigrationStateColumn(
@@ -219,10 +271,63 @@ AlterOperations = DropColumn | CreateColumn | SetDefault | DropDefault
 
 
 @dataclasses.dataclass(kw_only=True)
-class Index:
+class MigrationIndex:
     on: str
     unique: bool = True
     concurrently: bool = True
+
+    @classmethod
+    def from_index(cls, idx: Index):
+        builder = SQLBuilder(dml_mode=True)
+        builder.write("(")
+        if isinstance(idx.on, tuple):
+            on_cols = idx.on
+        else:
+            on_cols = [idx.on]
+        wrote_val = False
+        for on in on_cols:
+            if wrote_val:
+                builder.write(", ")
+            wrote_val = True
+            on.__sql__(builder)
+        builder.write(")")
+        if builder.vars:
+            raise RhubarbException(
+                f"Cannot use variables when defining Index {builder.q} {builder.vars}"
+            )
+        on_str = builder.q
+        return cls(
+            on=on_str,
+            unique=idx.unique,
+            concurrently=idx.concurrently,
+        )
+
+
+@dataclasses.dataclass(kw_only=True)
+class MigrationConstraint:
+    check: str
+    unique: bool = False
+    primary_key: bool = False
+
+    @property
+    def modifier(self):
+        if self.primary_key:
+            return "PRIMARY KEY"
+        elif self.unique:
+            return "UNIQUE"
+        else:
+            return "CHECK"
+
+    @classmethod
+    def from_constraint(cls, cst: Constraint):
+        builder = SQLBuilder(dml_mode=True)
+        cst.check.__sql__(builder)
+        if builder.vars:
+            raise RhubarbException(
+                f"Cannot use variables when defining Constraint {builder.q} {builder.vars}"
+            )
+        check_str = builder.q
+        return cls(check=check_str, unique=cst.unique)
 
 
 @register_operation
@@ -233,8 +338,10 @@ class CreateTable(MigrationOperation):
     class_name: str
     primary_key: tuple[str, ...]
     columns: list[CreateColumn]
-    constraints: dict[str, str] = dataclasses.field(default_factory=dict)
-    indexes: dict[str, Index] = dataclasses.field(default_factory=dict)
+    constraints: dict[str, MigrationConstraint] = dataclasses.field(
+        default_factory=dict
+    )
+    indexes: dict[str, MigrationIndex] = dataclasses.field(default_factory=dict)
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
         builder = SQLBuilder()
@@ -252,28 +359,35 @@ class CreateTable(MigrationOperation):
             if column.default and not isinstance(column.default, Unset):
                 builder.write(f" DEFAULT {column.default}")
 
+            if column.references:
+                builder.write(f" REFERENCES {column.references.real_table_name}")
+
+                if column.references.on_delete:
+                    builder.write(f" ON DELETE {column.references.on_delete}")
+
         for constraint_name, constraint in self.constraints.items():
             if wrote_val:
                 builder.write(", ")
             wrote_val = True
-            builder.write(f"CONSTRAINT {constraint_name} {constraint}")
+            builder.write(
+                f"CONSTRAINT {constraint_name} {constraint.modifier} {constraint.check}"
+            )
 
         builder.write(f")")
-        print(builder.q)
         await conn.execute(builder.q)
 
         for index_name, index in self.indexes.items():
             builder = SQLBuilder()
             unique = ""
             if index.unique:
-                unique = "UNIQUE"
+                unique = "UNIQUE "
 
             concurrently = ""
-            if index.concurrently:
-                concurrently = "CONCURRENTLY"
+            if index.concurrently and conn.autocommit:
+                concurrently = "CONCURRENTLY "
 
             builder.write(
-                f"CREATE {unique} INDEX {concurrently} {index_name} ON {self.name} ({index.on})"
+                f"CREATE {unique}INDEX {concurrently}{index_name} ON {self.name} {index.on}"
             )
             await conn.execute(builder.q)
 
