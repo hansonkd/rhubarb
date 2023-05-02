@@ -405,7 +405,7 @@ class TupleExtractor(Extractor[V]):
 
 
 class Selector(Generic[V]):
-    def __joins__(self) -> Iterator[(str, Join, str)]:
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
         return iter(())
 
     def __sql__(self, builder: SQLBuilder):
@@ -485,19 +485,17 @@ class WrappedSelector(Selector[V]):
     def __repr__(self):
         return f"WrappedSelector({self._selector}, {self._model_reference.model.__name__}.{self._field.name})"
 
-    def __joins__(self) -> Iterator[(str, Join, str)]:
-        return self._selector.__joins__()
-
-    def __joins__(self) -> Iterator[(str, Join, str)]:
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
         if (
             isinstance(self._selector, Aggregate)
             and self._selector._model_selector._join
         ):
             join = self._selector._model_selector._join
-            yield join.id, join, self._field.name
+            if (join.id, self._field.name) not in seen:
+                seen.add((join.id, self._field.name) )
+                yield join.id, join, self._field.name
         else:
-            yield from self._selector.__joins__()
-
+            yield from joins(self._selector, seen)
 
     def __sql__(self, builder: SQLBuilder):
         return self._selector.__sql__(builder)
@@ -591,10 +589,11 @@ class WrappedSelector(Selector[V]):
 #
 
 class Computed(Selector[V]):
-    def __init__(self, args: list[Selector], op: str, infixed=True):
+    def __init__(self, args: list[Selector], op: str, sep=",", infixed=True):
         self._args = args
         self._op = op
         self._infixed = infixed
+        self._sep = sep
 
     def __sql__(self, builder: SQLBuilder):
         if self._infixed:
@@ -608,27 +607,52 @@ class Computed(Selector[V]):
             wrote_val = False
             for arg in self._args:
                 if wrote_val:
-                    builder.write(", ")
+                    builder.write(f"{self._sep} ")
                 wrote_val = True
                 builder.write_value(arg)
             builder.write(")")
 
-    def __joins__(self) -> Iterator[(str, Join, str)]:
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
         for arg in self._args:
             if hasattr(arg, "__joins__"):
-                yield from arg.__joins__()
+                yield from arg.__joins__(seen)
+
+
+class Case(Selector[V]):
+    def __init__(self, whens: list[tuple[Selector[bool], Selector[V]]], default: Selector[V] | None = None):
+        self.whens = whens
+        self.default = default
+
+    def __sql__(self, builder: SQLBuilder):
+        builder.write(f"CASE")
+        for cond, then_val in self.whens:
+            builder.write(" WHEN ")
+            builder.write_value(cond)
+            builder.write(" THEN ")
+            builder.write_value(then_val)
+        if self.default:
+            builder.write(" ELSE ")
+            builder.write_value(self.default)
+        builder.write(" END")
+
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
+        for cond, then_val in self.whens:
+            yield from joins(cond, seen=seen)
+            yield from joins(then_val, seen=seen)
+        if self.default:
+            yield from joins(self.default, seen=seen)
 
 
 class Value(Selector[V]):
-    def __init__(self, val: Any):
+    def __init__(self, val: V):
         self.val = val
 
     def __sql__(self, builder: SQLBuilder):
         builder.write_value(self.val)
 
-    def __joins__(self) -> Iterator[(str, Join, str)]:
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
         if hasattr(self.val, "__joins__"):
-            yield from self.val.__joins__()
+            yield from self.val.__joins__(seen)
 
 
 class PythonValueExtractor(Extractor[V]):
@@ -650,9 +674,9 @@ class PythonOnlyValue(Selector[V]):
     def __extractor__(self, builder: SQLBuilder, alias_name: str = None) -> Extractor:
         return PythonValueExtractor(self.val, None, None)
 
-    def __joins__(self) -> Iterator[(str, Join, str)]:
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
         if hasattr(self.val, "__joins__"):
-            yield from self.val.__joins__()
+            yield from self.val.__joins__(seen)
 
 
 class UseExtractor(Extractor[V]):
@@ -689,8 +713,7 @@ class UseSelector(Selector[V]):
         }
         return UseExtractor(self.fn, dependant_extractors, dependant_kwarg_extractors, None, None)
 
-    def __joins__(self) -> Iterator[(str, Join, str)]:
-        seen = set()
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
         for s in self.dependencies:
             yield from joins(s, seen=seen)
 
@@ -731,13 +754,17 @@ class ColumnSelector(Selector[V]):
         alias = builder.write_column(self._model_reference, self._field, alias=alias)
         return SimpleExtractor(alias, self._model_reference, self._field)
 
-    def __joins__(self) -> Iterator[(str, Join, str)]:
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
         for join_id, join in self._model_reference.object_set.joins.items():
             for join_field in self._model_reference.object_set.join_fields[join_id]:
-                yield join_id, join, join_field
+                if (join_id, join_field) not in seen:
+                    seen.add((join_id, join_field))
+                    yield join_id, join, join_field
 
         if self._join:
-            yield self._join.id, self._join, self._field.name
+            if (self._join.id, self._field.name) not in seen:
+                seen.add((self._join.id, self._field.name))
+                yield self._join.id, self._join, self._field.name
 
 
 class FieldSelector(Selector[V]):
@@ -844,8 +871,7 @@ class ModelSelector(Selector[T]):
                 selector = selector(info=self._model_reference.object_set.info)
         return selector
 
-    def __joins__(self) -> Iterator[(str, Join, str)]:
-        seen = set()
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
         for column_field in columns(self._model_reference.model, inlinable=True):
             if column_field.name not in self._selection_names:
                 continue
@@ -932,10 +958,10 @@ class DataclassSelector(Selector[T]):
             selected_fields=selected_fields,
         )
 
-    def __joins__(self) -> Iterator[(str, Join, str)]:
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
         for name in self._selection_names:
             selector = self._prefilled_selectors[name]
-            yield from joins(selector)
+            yield from joins(selector, seen)
 
     def __sql__(self, builder: SQLBuilder):
         builder.write("(")
@@ -978,8 +1004,8 @@ class ListSelector(Selector[V]):
     def __inner_selector__(self) -> Selector:
         return self.inner_selector.__inner_selector__()
 
-    def __joins__(self) -> Iterator[(str, str)]:
-        yield from self.inner_selector.__joins__()
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, str)]:
+        yield from self.inner_selector.__joins__(seen)
 
     def __sql__(self, builder: SQLBuilder):
         self.inner_selector.__sql__(builder)
@@ -1799,14 +1825,12 @@ def pk_columns(model: Type[T]) -> tuple[ColumnField, ...] | ColumnField:
     return get_column(model, model.__pk__)
 
 
-def joins(selector: Selector[T], seen=None) -> Iterator[(str, Join, str)]:
+def joins(selector: Selector, seen=None) -> Iterator[(str, Join, str)]:
     seen = seen or set()
     if not hasattr(selector, "__joins__"):
         return
-    for join_id, join, field_name in selector.__joins__():
-        if (join_id, field_name) not in seen:
-            seen.add((join_id, field_name))
-            yield join_id, join, field_name
+    for join_id, join, field_name in selector.__joins__(seen):
+        yield join_id, join, field_name
 
 
 class ColumnField(StrawberryField):
@@ -2133,6 +2157,18 @@ def json_agg(model_selector: ModelSelector, column: Selector):
 
 def concat(*args: Selector[str] | str):
     return Computed(args=list(args), op="CONCAT", infixed=False)
+
+
+def coalesce(*args: Selector[str] | str):
+    return Computed(args=list(args), op="COALESCE", infixed=False)
+
+
+def cast(o: Selector, t: SqlType):
+    return Computed(args=[o, t], op="CAST", infixed=False, sep="AS")
+
+
+def case(*whens: tuple[Selector[bool], Selector[V]], default: Selector[V] = None):
+    return Case(list(whens), default=default)
 
 
 def val(v: Any):

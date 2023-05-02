@@ -22,7 +22,7 @@ from rhubarb.extension import RhubarbExtension
 from rhubarb.migrations.utils import reset_db_and_fast_forward
 from rhubarb.model import BaseUpdatedAtModel
 from rhubarb.object_set import ModelSelector, ModelUpdater, ObjectSet, column, sum_agg, Aggregate, relation, table, \
-    virtual_column, python_field, Registry, field, avg_agg, max_agg, concat
+    virtual_column, python_field, Registry, field, avg_agg, max_agg, concat, case, Value
 
 
 @pytest_asyncio.fixture
@@ -174,6 +174,15 @@ class RatingModel(BaseUpdatedAtModel):
     @column(virtual=True)
     def inflated(self) -> int:
         return self.rating + 1
+
+    @column(virtual=True)
+    def case_computation(self: ModelSelector) -> str:
+        return case(
+            (self.rating == 0, Value("Bad")),
+            (self.rating < 5, Value("Poor")),
+            (self.rating < 7, Value("Good")),
+            default=Value("Excellent")
+        )
 
 
 @table(registry=None)

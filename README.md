@@ -29,14 +29,24 @@ class Person(BaseModel):
     first_name: str = column()
     last_name: str = column()
     favorite_number: int = column()
+    score: int = column()
     
     @virtual_column
-    def full_name(self) -> str:
+    def full_name(self: ModelSelector) -> str:
         return concat(self.first_name, self.last_name)
 
     @virtual_column
-    def favorite_number_is_42(self) -> bool:
+    def favorite_number_is_42(self: ModelSelector) -> bool:
         return self.favorite_number == 42
+
+    @virtual_column
+    def case_computation(self: ModelSelector) -> str:
+        return case(
+            (self.score == 0, Value("Bad")),
+            (self.score < 5, Value("Poor")),
+            (self.score < 7, Value("Good")),
+            default=Value("Excellent")
+        )
 ```
 
 
@@ -46,7 +56,7 @@ Rhubarb will follow child selections and inline as many queries for relation dat
 
 #### Relationships with Many Objects
 
-If you are a parent with many children, you can return a list of children by specifying that you want to return a list using `graphql_type` like so `@relation(graphql_type=list[Pet])`.
+If you have a parent with many children, you can return a list of children by specifying that you want to return a list using `graphql_type` like so `@relation(graphql_type=list[Pet])`.
 
 Because Rhubarb Aggressively inlines all possible fields into a SQL Query, if you return a `list` from a Relation, there is an optimization fence in which Rhubarb will no longer try to inline the relation. Rhubarb will instead start a new tree and start inlining as many children as possible. This is to avoid exploding cartesian products.
 

@@ -67,6 +67,8 @@ async def test_reviews(schema, postgres_connection, basic_data):
                 assert rating["rating"]
 
 
+
+
 @pytest.mark.asyncio
 async def test_aggregations_at_top_level(schema, postgres_connection, basic_data):
     conn = postgres_connection
@@ -297,3 +299,20 @@ async def test_delete(schema, postgres_connection, basic_data):
     assert res.data["all_books"]
     assert len(res.data["all_books"]) == 3
     assert str(first_book.id) not in [b["id"] for b in res.data["all_books"]]
+
+
+@pytest.mark.asyncio
+async def test_case(schema, postgres_connection, basic_data):
+    conn = postgres_connection
+
+    with track_queries() as tracker:
+        res = await schema.execute(
+            "query { all_ratings { case_computation } }",
+            context_value={"conn": conn},
+        )
+        assert res.errors is None
+        for query in tracker.queries:
+            print(query)
+        assert len(tracker.queries) == 1
+        for rating in res.data["all_ratings"]:
+            assert rating["case_computation"]
