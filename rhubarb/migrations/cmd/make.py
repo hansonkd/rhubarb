@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
@@ -21,22 +22,27 @@ def make_migration(migration_dir="./migrations", check=False, empty=False, regis
         empty=empty,
     )
     if result is None:
+        logging.info(f"No migration to create.")
         return False
 
     fn, mig_file = result
-    if not check:
+    if check:
+        logging.info(f"Skipping writing {fn} (check mode)")
+    else:
+        logging.info(f"Creating migration {fn}")
         with open(migration_dir / fn, "w") as f:
             f.write(mig_file)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog='rhubarb.migrations.make',
+        prog='rhubarb.migrations.cmd.make',
         description='Make new migrations based on the state of your program\'s tables')
     parser.add_argument('-c', '--check', action='store_true', help="Run the command but don't save the file. Return code reflects if a migration would have been made.")
     parser.add_argument('-e', '--empty', action='store_true', help="Create an empty migration file if there are no changes")
     args = parser.parse_args()
 
+    logging.info(f"Running {parser.prog}")
     program_result = make_migration(empty=args.empty, check=args.check)
     if program_result:
         sys.exit(os.CLD_EXITED)
