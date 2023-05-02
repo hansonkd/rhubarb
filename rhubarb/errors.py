@@ -1,0 +1,2 @@
+class RhubarbException(Exception):
+    pass
