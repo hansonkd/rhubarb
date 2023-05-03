@@ -519,8 +519,11 @@ class AwesomeTable(BaseModel):
 
 ### Running Python in Migrations
 
-If you want to run a data migration and you need to run python, then generate migrations with `python -m rhubarb.migrations.cmd.make --empty`, and add  `RunPython` to the operations list.
+If you want to run a data migration and you need to run python, then generate migrations with `--empty`, and add  `RunPython` to the operations list.
 
+```bash
+python -m rhubarb.migrations.cmd.make --empty
+```
 With RunPython, you get a snapshot of table instances with only concrete fields (no virtual columns or relationships). If you need a computation, redefine it inside the migration so that when you code changes, your migration will always stay the same.
 
 ```python
