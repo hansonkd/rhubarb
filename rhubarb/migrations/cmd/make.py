@@ -11,6 +11,14 @@ from rhubarb.migrations.utils import (
     load_migrations,
 )
 
+try:
+    from black import format_file_contents, FileMode
+    use_black = True
+except ImportError:
+    use_black = False
+    format_file_contents = None
+    FileMode = None
+
 
 def make_migration(check=False, empty=False) -> bool:
     migration_dir = config().migration_directory
@@ -34,7 +42,11 @@ def make_migration(check=False, empty=False) -> bool:
         logging.info(f"Skipping writing {fn} (check mode)")
     else:
         logging.info(f"Creating migration {fn}")
-        with open(migration_dir / fn, "w+") as f:
+        if use_black:
+            mig_file = format_file_contents(mig_file, fast=True, mode=FileMode())
+        if not migration_dir.exists():
+            migration_dir.mkdir(parents=True, exist_ok=True)
+        with open(migration_dir / fn, "w") as f:
             f.write(mig_file)
 
 

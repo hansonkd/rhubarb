@@ -50,7 +50,7 @@ async def run_migrations(create_extensions=True, check=False) -> bool:
 if __name__ == "__main__":
     init_rhubarb()
     parser = argparse.ArgumentParser(
-        prog="rhubarb.migrations.make",
+        prog="rhubarb.migrations.apply",
         description="Make new migrations based on the state of your program's tables",
     )
     parser.add_argument(
@@ -60,14 +60,14 @@ if __name__ == "__main__":
         help="Run the command but don't save the file. Return code reflects if a migration would have been made.",
     )
     parser.add_argument(
-        "--extensions",
-        action="store_true",
-        help="Run the command but don't save the file. Return code reflects if a migration would have been made.",
+        "--skip-extensions",
+        action="store_false",
+        help="Skip creating the necessary extensions for UUID, etc.",
     )
     args = parser.parse_args()
 
     program_result = asyncio.run(
-        run_migrations(check=args.check, create_extensions=args.extensions)
+        run_migrations(check=args.check, create_extensions=not args.skip_extensions)
     )
     if program_result:
         sys.exit(os.CLD_EXITED)

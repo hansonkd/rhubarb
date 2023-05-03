@@ -2277,12 +2277,16 @@ def optimize_selection(selected_fields: SelectedFields, selection):
     return selection
 
 
+PyF = TypeVar("PyF", bound=Callable[..., SQLValue])
+
+
 def python_field(
     depends_on: Callable[
         [ModelSelector], list[Selector] | Selector | dict[str, Selector]
     ]
-) -> Callable[[Callable[..., V]], ColumnField]:
-    def wrap(fn):
+) -> Callable[[PyF], ColumnField]:
+
+    def wrap(fn: staticmethod):
         wrapped_field = strawberry.field(fn)
         sig = inspect.signature(fn)
 

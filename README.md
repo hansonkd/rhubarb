@@ -1,6 +1,6 @@
 # Rhubarb - The Funky Sweet Python ORM built on Strawberry GraphQL
 
-Rhubarb is an ORM written from scratch focused on optimizing traversing GQL data generated through postgres.
+Rhubarb is an ORM baked from scratch focused on automatic optimizations with Postgres data using GQL.
 
 <img width="653" alt="Screenshot 2023-05-03 at 2 32 48 AM" src="https://user-images.githubusercontent.com/496914/235881083-f47d21ff-2462-46f9-acc2-e900316fe05f.png">
 
@@ -313,7 +313,6 @@ Sometimes you may not want to have all your computations be in SQL. If you want 
 
 ```python
 import uuid
-import asyncio
 from rhubarb import BaseModel, column, table, relation, python_field, virtual_column
 from rhubarb.functions import concat
 
@@ -329,12 +328,13 @@ class Address(BaseModel):
 class Person(BaseModel):
     first_name: str = column()
     last_name: str = column()
+    favorite_pokemon: int = column()
 
     @relation
     def address(self, address: Address):
         return self.id == address.person_id
 
-    # Executed in SQL. Cannot use list interpolation with virtual_column
+    # Executed in SQL so need to use special SQL function.
     @virtual_column
     def full_name_sql(self):
         return concat(self.first_name, " ", self.last_name)
@@ -345,14 +345,20 @@ class Person(BaseModel):
         return f"{first_name} {last_name}"
 
     # Can use kwargs and async functions...
-    @python_field(lambda x: {"fn": x.first_name, "ln": x.last_name})
-    async def full_name_async_python(self, fn: str, ln: str):
-        await asyncio.sleep(1)
-        return f"{fn} {ln}"
+    @staticmethod
+    @python_field(lambda x: {"fn": x.first_name, "pokemon_id": x.favorite_pokemon})
+    async def api_backed_python_field(fn: str, pokemon_id: int):
+        # In the real world, probably would cache this HTTP Call or something.
+        async with aiohttp.ClientSession() as session:
+            pokemon_url = f'https://pokeapi.co/api/v2/pokemon/{pokemon_id}/'
+            async with session.get(pokemon_url) as resp:
+                pokemon = await resp.json()
+                pokemon_name = pokemon["name"]
+                return f"{fn}'s Favorite Pokemon is pokemon {pokemon_name}"
 
     # Can use relations and other virtual columns...
     @python_field(lambda x: {"sql_full_name": x.full_name_sql(), "address": x.address()})
-    def full_name_async_python(self, sql_full_name: str, address: Address):
+    def full_name_with_relation_python(self, sql_full_name: str, address: Address):
         return f"{sql_full_name} from {address.city} {address.state}"
 ```
 
