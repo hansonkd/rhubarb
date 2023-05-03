@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 
 import pytest
@@ -246,12 +247,13 @@ async def test_add_fk(postgres_connection):
     changed_registry = Registry()
 
     @table(registry=changed_registry)
-    class OtherModel(BaseUpdatedAtModel):
+    class OtherRatingModel(BaseUpdatedAtModel):
         id: int = column()
+        rating_id: uuid.UUID = column(references=References(lambda: RatingModel.__table__))
 
     @table(registry=changed_registry)
     class RatingModel(BaseUpdatedAtModel):
-        rating: int = column(references=References(OtherModel.__table__))
+        rating: int = column(references=References(OtherRatingModel.__table__))
 
     new_state = MigrationStateDatabase.from_registry(changed_registry)
     diffs = find_diffs(old_state=REFERENCE_STATE, new_state=new_state)

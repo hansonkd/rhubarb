@@ -1,5 +1,5 @@
 import copy
-from typing import Type, Callable, Literal
+from typing import Type, Callable
 
 from psycopg import AsyncConnection
 from strawberry.types import Info

@@ -4,24 +4,116 @@ Rhubarb is an ORM written from scratch focused on optimizing traversing data gen
 
 ## Rhubarb at a glance
 
-With rhubarb you declare Postgres tables with Strawberry dataclasses.
+* Asyncio Native
+* Built on GraphQL for optimization layer on nested queries
+* Doesn't use any other Python ORM for DB access, only Psycopg3
+* Migrations - Automatically generate Schema changes as your data model updates.
+* Intuitively Solve N+1 without even realizing it
+* Simplify Aggregations / Joins / Subqueries
+
+Rhubarb declares Postgres tables with Strawberry dataclasses.
 
 ```python
-from rhubarb.model import  BaseModel, column, table
+import decimal
+import datetime
+import uuid
+from typing import Optional
+from rhubarb import Schema, ObjectSet, ModelSelector, BaseModel, RhubarbExtension, column, table, type, \
+    field, get_conn, query, references, relation, virtual_column
+from strawberry.scalars import JSON
+from strawberry.types import Info
+
+
+@table
+class TableWithoutSuperClass:
+    __schema__ = "public"
+    __table__ = "my_awesome_table"
+    __pks__ = "id"
+    id: int = column()
+    info: str = column()
+
 
 
 @table
 class Person(BaseModel):
     name: str = column()
+    some_uuid: Optional[uuid.UUID] = column(sql_default="generate_uuid_v4()")
+    a_bool_column: bool = column(column_name="awesome_custom_column_name")
+    example_dt_col: datetime.datetime = column(sql_default="now()")
+    example_date_col: datetime.date = column()
+    example_float_col: float = column()
+    example_int_col: int = column()
+    example_decimal_col: decimal.Decimal = column()
+    example_bytes_col: bytes = column()
+    example_jsonb_col: JSON = column()
+    
+    other_table_reference_id: int = references(TableWithoutSuperClass.__table__)
+
+    @relation
+    def other_table(self, other: TableWithoutSuperClass):
+        return self.other_table_reference_id == other.id
+    
+    @virtual_column
+    def int_is_big(self) -> bool:
+        return self.example_int_col > 100
+
+@type
+class Query:
+    @field(graphql_type=list[Person])
+    def all_people(self, info: Info) -> ObjectSet[Person, ModelSelector[Person]]:
+        return query(Person, get_conn(info), info)
+
+
+schema = Schema(
+    query=Query,
+    extensions=[
+        RhubarbExtension
+    ]
+)
 ```
+
+Now we can use our schema to make queries and Rhubarb will try to optimize them for you.
+
+Currently, Rhubarb only does a few optimizations but they cover most use cases:
+
+* Selecting only the columns being asked for in the current GQL query
+* Inlining joins the don't produce more rows.
+* Managing exploding cartesian products from m:n joins
+* Pushing Aggregates to Subquery
+* Combining aggregates if they use same `GROUP BY`
+
+```python
+from rhubarb.connection import connection
+
+
+async with connection() as conn:
+    await schema.execute(
+        """
+        query {
+            all_people {
+                name
+                int_is_big
+                a_bool_column
+                other_table {
+                    id
+                    info
+                }
+            }
+        }
+        """,
+        context_value={"conn": conn}
+    )
+```
+
+You can either use Rhubarb stand alone or integrate it with FastAPI and Strawberry for a web service.
 
 ### Virtual Columns
 
 These Strawberry Types are different from standard Python objects. methods decorated with `virtual_column` and `field` are not executed in Python. These methods are pushed down and transformed into SQL to be executed on the Postgres Server.
 
 ```python
-from rhubarb.model import  BaseModel, column, table
-from rhubarb.object_set import virtual_column, concat
+from rhubarb import  BaseModel, ModelSelector, column, table, virtual_column
+from rhubarb.functions import concat, case, Value
 
 
 @table
@@ -61,8 +153,7 @@ If you have a parent with many children, you can return a list of children by sp
 Because Rhubarb Aggressively inlines all possible fields into a SQL Query, if you return a `list` from a Relation, there is an optimization fence in which Rhubarb will no longer try to inline the relation. Rhubarb will instead start a new tree and start inlining as many children as possible. This is to avoid exploding cartesian products.
 
 ```python
-from rhubarb.model import  BaseModel, column, table
-from rhubarb.object_set import relation
+from rhubarb import  BaseModel, column, table, relation
 
 
 @table
@@ -95,8 +186,8 @@ Once a `__group_by__` is set on a table, all methods and virtual columns have to
 Rhubarb will make a subquery and join to do the groupby in order to avoid mixing groupby in your parent query.
 
 ```python
-from rhubarb.model import  BaseModel, column, table
-from rhubarb.object_set import relation, virtual_column
+from rhubarb import  BaseModel, column, table, relation, virtual_column
+from rhubarb.functions import sum_agg, avg_agg
 
 
 @table
@@ -106,7 +197,7 @@ class Pet(BaseModel):
     weight_lbs: float = column()
 
 
-@table(registry=None)
+@table(skip_registry=True)
 class PetByOwner(Pet):
     @virtual_column
     def avg_weight(self) -> float:
@@ -147,8 +238,8 @@ Sometimes you may not want to have all your computations be in SQL. If you want 
 ```python
 import uuid
 import asyncio
-from rhubarb.model import BaseModel, column, table
-from rhubarb.object_set import python_field, virtual_column, concat, relation
+from rhubarb import BaseModel, column, table, relation, python_field
+from rhubarb.functions import concat
 
 
 @table
@@ -214,11 +305,35 @@ python -m rhubarb.migrations.cmd.reset
 
 ## Migration Basics
 
-#### Indexes and Constraints
+You can manage migrations with Registries. A registry is a group of models that can include other registries. This allows you include apps with collections of models in your app.
 
-Indexes and constraints are returned with the `__indexes__` and `__constraints__` function. Rhubarb will monitor if these change by their key and update them if needed.
+By default there is a DEFAULT_REGISTRY that all models are registered to.
 
 ```python
+from rhubarb import Registry, BaseModel, table
+
+registry = Registry()
+
+@table(registry)
+class MyTable(BaseModel):
+    pass
+
+
+# Don't include in migrations...
+@table(skip_registry=True)
+class OtherTable(BaseModel):
+    pass
+```
+
+#### Indexes and Constraints
+
+Indexes and constraints are returned with the `__indexes__` and `__constraints__` function. Rhubarb will monitor if these change by their key and generate migrations if needed.
+
+```python
+from rhubarb import BaseModel, column, table, Index, Constraint
+from rhubarb.functions import concat
+
+
 @table
 class Person(BaseModel):
     first_name: str = column()
@@ -244,11 +359,16 @@ class Person(BaseModel):
         }
 ```
 
-You can add a `DEFAULT` to a column with `default_sql`. Only some SQL functions are supported.
+You can add a `DEFAULT` to a column with `sql_default`. Only some SQL functions are supported in order to preserve serialization functionality with Migrations for now.
 
 ```python
+import uuid
+import datetime
+from rhubarb import BaseModel, column, table
+
+
 @table
 class AwesomeTable(BaseModel):
-    some_uuid: uuid.UUID = column(default_sql="generate_uuid_v4()")
-    some_datetime: datetime.datetime = column(default_sql="now()")
+    some_uuid: uuid.UUID = column(sql_default="generate_uuid_v4()")
+    some_datetime: datetime.datetime = column(sql_default="now()")
 ```

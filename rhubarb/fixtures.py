@@ -6,7 +6,7 @@ import pytest_asyncio
 from psycopg import AsyncConnection
 
 from rhubarb.connection import connection
-from rhubarb.config import _program_state, Config, init_rhubarb, PostgresConfig
+from rhubarb.config import _program_state, Configå, PostgresConfig
 
 
 @pytest.fixture(scope="session")

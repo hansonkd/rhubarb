@@ -3,7 +3,7 @@ import datetime
 import uuid
 
 from rhubarb.core import SupportsSqlModel
-from rhubarb.object_set import column, table, relation
+from rhubarb.object_set import column
 
 
 @dataclasses.dataclass

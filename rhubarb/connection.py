@@ -7,7 +7,6 @@ from typing import Optional, Protocol, ContextManager
 from psycopg import AsyncConnection, AsyncCursor
 from psycopg.abc import Query, Params
 from psycopg.rows import Row
-from asgiref.local import Local
 import time
 
 from rhubarb.config import config
@@ -47,7 +46,6 @@ class LocalQueryListeners:
 
     def new_query(self, query, params, duration_ns):
         logging.debug(f"[QUERY] {query}")
-        print(f"[QUERY] {query}")
         for listener in self.listeners.values():
             listener.new_query(query, params, duration_ns)
 

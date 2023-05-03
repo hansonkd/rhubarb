@@ -34,7 +34,7 @@ class FrozenReference:
     def from_reference(cls, reference: References) -> Optional[Self]:
         if reference:
             return cls(
-                reference.table_name,
+                table_name=reference.real_table_name,
                 constraint_name=reference.constraint_name,
                 on_delete=reference.on_delete,
             )
