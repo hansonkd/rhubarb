@@ -1,6 +1,5 @@
 import copy
 import inspect
-import json
 import pprint
 from typing import Callable, Type, Any, Awaitable, Optional, Self
 from rhubarb.core import SupportsSqlModel, T, UNSET, DEFAULT_SQL_FUNCTION, Unset
@@ -161,19 +160,6 @@ def state_from_table(m: Type[T]):
         indexes=indexes,
         constraints=constraints,
     )
-
-
-class MigrationJSONEncoder(json.JSONEncoder):
-    def default(self, o):
-        if dataclasses.is_dataclass(o):
-            dict_vals = dataclasses.asdict(o)
-            return dict(
-                {"_operation": o.__class__.__name__}.items() | dict_vals.items()
-            )
-        elif isinstance(o, Unset):
-            return "...cgda.UNSET"
-
-        return super().default(o)
 
 
 @register_operation

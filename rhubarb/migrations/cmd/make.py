@@ -34,7 +34,7 @@ def make_migration(check=False, empty=False) -> bool:
         logging.info(f"Skipping writing {fn} (check mode)")
     else:
         logging.info(f"Creating migration {fn}")
-        with open(migration_dir / fn, "w") as f:
+        with open(migration_dir / fn, "w+") as f:
             f.write(mig_file)
 
 

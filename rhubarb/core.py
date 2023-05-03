@@ -68,7 +68,7 @@ class Unset:
     """Values that aren't loaded from the database"""
 
     def __repr__(self):
-        return "cgda.UNSET"
+        return "rhubarb.UNSET"
 
     def __sql__(self, builder):
         builder.write("DEFAULT")

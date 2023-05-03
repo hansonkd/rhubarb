@@ -17,13 +17,16 @@ _program_state = ProgramState()
 
 def init_rhubarb():
     if _program_state.config is None:
-        config_path = os.getenv("RHUBARB_CONFIG", "settings.Config")
-        module_name, attr_name = config_path.rsplit(".", 1)
+        config_path = os.getenv("RHUBARB_CONFIG", None)
+        if config_path is None:
+            config_obj = Config()
+        else:
+            module_name, attr_name = config_path.rsplit(".", 1)
 
-        config_module = importlib.import_module(module_name)
-        config_obj = getattr(config_module, attr_name)
-        if callable(config_obj):
-            config_obj = config_obj()
+            config_module = importlib.import_module(module_name)
+            config_obj = getattr(config_module, attr_name)
+            if callable(config_obj):
+                config_obj = config_obj()
         _program_state.config = config_obj
     else:
         raise RhubarbException("Cannot call `init_rhubarb` more than once.")
