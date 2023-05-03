@@ -14,4 +14,7 @@ from .data import (
     AlterTypeUsing,
     AddReferencesConstraint,
     Migration,
+    RunPython,
+    RawSQL,
+    MigrationInfo,
 )

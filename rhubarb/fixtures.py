@@ -6,12 +6,18 @@ import pytest_asyncio
 from psycopg import AsyncConnection
 
 from rhubarb.connection import connection
-from rhubarb.config import _program_state, Configå, PostgresConfig
+from rhubarb.config import _program_state, Config, PostgresConfig
 
 
 @pytest.fixture(scope="session")
 def rhubarb(config_override):
-    with config_override(Config(postgres=PostgresConfig(host="localhost", dbname="debug", password="debug", user="debug"))):
+    with config_override(
+        Config(
+            postgres=PostgresConfig(
+                host="localhost", dbname="debug", password="debug", user="debug"
+            )
+        )
+    ):
         yield
 
 

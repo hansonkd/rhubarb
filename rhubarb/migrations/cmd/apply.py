@@ -5,7 +5,7 @@ import logging
 import os
 import sys
 
-from rhubarb.config import config
+from rhubarb.config import config, init_rhubarb
 from rhubarb.connection import connection
 from rhubarb.migrations.data import MigrationStateDatabase
 from rhubarb.migrations.utils import (
@@ -16,8 +16,11 @@ from rhubarb.migrations.utils import (
 from rhubarb.migrations.models import migration_was_applied, mark_migration_as_applied
 
 
-async def run_migrations(check=False) -> bool:
+async def run_migrations(create_extensions=True, check=False) -> bool:
     async with connection() as conn:
+        if create_extensions and not check:
+            await conn.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+
         migration_dir = config().migration_directory
         head_migrations, current_migrations = load_migrations(migration_dir)
         current_state = current_migration_state(head_migrations, current_migrations)
@@ -56,9 +59,16 @@ if __name__ == "__main__":
         action="store_true",
         help="Run the command but don't save the file. Return code reflects if a migration would have been made.",
     )
+    parser.add_argument(
+        "--extensions",
+        action="store_true",
+        help="Run the command but don't save the file. Return code reflects if a migration would have been made.",
+    )
     args = parser.parse_args()
 
-    program_result = asyncio.run(run_migrations(check=args.check))
+    program_result = asyncio.run(
+        run_migrations(check=args.check, create_extensions=args.extensions)
+    )
     if program_result:
         sys.exit(os.CLD_EXITED)
     else:

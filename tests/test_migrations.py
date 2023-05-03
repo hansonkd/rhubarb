@@ -3,6 +3,7 @@ from typing import Optional
 
 import pytest
 
+from rhubarb import query
 from rhubarb.migrations.data import (
     MigrationStateDatabase,
     CreateTable,
@@ -18,6 +19,8 @@ from rhubarb.migrations.data import (
     DropDefault,
     DropTable,
     AddReferencesConstraint,
+    RunPython,
+    MigrationInfo,
 )
 from rhubarb.migrations.utils import find_diffs, reset_db_and_fast_forward, fast_forward
 from rhubarb.model import BaseUpdatedAtModel
@@ -50,7 +53,6 @@ async def test_create_table(postgres_connection):
     assert isinstance(diffs[0], CreateTable)
     async with postgres_connection.transaction(force_rollback=True):
         await fast_forward(postgres_connection, EMPTY_STATE, REFERENCE_STATE)
-
 
 
 @pytest.mark.asyncio
@@ -199,7 +201,6 @@ async def test_add_index(postgres_connection):
         await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
 
 
-
 @pytest.mark.asyncio
 async def test_delete_index(postgres_connection):
     changed_registry = Registry()
@@ -249,7 +250,9 @@ async def test_add_fk(postgres_connection):
     @table(registry=changed_registry)
     class OtherRatingModel(BaseUpdatedAtModel):
         id: int = column()
-        rating_id: uuid.UUID = column(references=References(lambda: RatingModel.__table__))
+        rating_id: uuid.UUID = column(
+            references=References(lambda: RatingModel.__table__)
+        )
 
     @table(registry=changed_registry)
     class RatingModel(BaseUpdatedAtModel):
@@ -265,3 +268,15 @@ async def test_add_fk(postgres_connection):
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, migrations_registry)
         await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+
+
+@pytest.mark.asyncio
+async def test_run_python(postgres_connection):
+    async def mig_fn(info: MigrationInfo):
+        MigRatingModel = info.get_model("ratingmodel")
+        objs = await query(MigRatingModel, info.conn).as_list()
+        assert len(objs) == 0
+
+    async with postgres_connection.transaction(force_rollback=True):
+        await reset_db_and_fast_forward(postgres_connection, migrations_registry)
+        await RunPython(mig_fn).run(REFERENCE_STATE, postgres_connection)

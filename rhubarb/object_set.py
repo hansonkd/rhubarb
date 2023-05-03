@@ -2045,7 +2045,7 @@ class Registry:
         for registry in self.other_registries.values():
             yield from registry.values(seen)
 
-    def other_registry(self, registry: Registry):
+    def link(self, registry: Registry):
         self.other_registries[registry.id] = registry
 
 

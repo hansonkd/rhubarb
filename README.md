@@ -134,7 +134,7 @@ async with connection() as conn:
 
 ### Virtual Columns
 
-These Strawberry Types are different from standard Python objects. methods decorated with `virtual_column` and `field` are not executed in Python. These methods are pushed down and transformed into SQL to be executed on the Postgres Server.
+Rhubarb tables are different from standard Python objects. methods decorated with `virtual_column` and `field` are not executed in Python. These methods are pushed down and transformed into SQL to be executed on the Postgres Server.
 
 ```python
 from rhubarb import  BaseModel, ModelSelector, column, table, virtual_column
@@ -385,11 +385,26 @@ You can manage migrations with Registries. A registry is a group of models that 
 By default there is a DEFAULT_REGISTRY that all models are registered to.
 
 ```python
-from rhubarb import Registry, BaseModel, table
+from rhubarb import DEFAULT_REGISTRY, Registry, BaseModel, table
 
 registry = Registry()
 
-@table(registry)
+# You can link other registries to your registry, this is useful for other plugins or libs.
+# from some_third_party_plugin import third_party_registry
+# registry.link(third_party_registry)
+
+# For your main app, its a good idea to link DEFAULT_REGISTRY for the migration table.
+registry.link(DEFAULT_REGISTRY)
+
+
+
+# Go to default registry
+@table
+class SomeTable(BaseModel):
+    pass
+
+# Go to your specific registry
+@table(registry=registry)
 class MyTable(BaseModel):
     pass
 
@@ -399,6 +414,7 @@ class MyTable(BaseModel):
 class OtherTable(BaseModel):
     pass
 ```
+
 
 #### Indexes and Constraints
 
@@ -446,4 +462,34 @@ from rhubarb import BaseModel, column, table
 class AwesomeTable(BaseModel):
     some_uuid: uuid.UUID = column(sql_default="generate_uuid_v4()")
     some_datetime: datetime.datetime = column(sql_default="now()")
+```
+
+
+### Running Python in Migrations
+
+If you want to run a data migration and you need to run python, then generate migrations with `python -m rhubarb.migrations.cmd.make --empty`, and add  `RunPython` to the operations list.
+
+With RunPython, you get a snapshot of table instances with only concrete fields (no virtual columns or relationships). If you need a computation, redefine it inside the migration so that when you code changes, your migration will always stay the same.
+
+```python
+from rhubarb import migrations
+from rhubarb import query, save
+
+
+async def mig_fn(info: migrations.MigrationInfo):
+    RatingModel = info.get_model("ratingmodel")
+    objs = await query(RatingModel, info.conn).as_list()
+    for obj in objs:
+        obj.rating += 10
+        await save(obj, info.conn)
+
+
+def migrate():
+    return migrations.Migration(
+        id="migration_20230426-034718",
+        depends_on=[...],
+        operations=[
+            RunPython(mig_fn)
+        ]
+    )
 ```

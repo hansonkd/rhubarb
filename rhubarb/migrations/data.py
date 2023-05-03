@@ -755,6 +755,18 @@ class RunPython(MigrationOperation):
         return state
 
 
+@register_operation
+@dataclasses.dataclass(frozen=True)
+class RawSQL(MigrationOperation):
+    sql: str
+
+    async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
+        await conn.execute(self.sql)
+
+    def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
+        return state
+
+
 @dataclasses.dataclass(frozen=True)
 class Migration:
     id: str
