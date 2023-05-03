@@ -2,6 +2,10 @@
 
 Rhubarb is an ORM written from scratch focused on optimizing traversing data generated through postgres.
 
+<img width="653" alt="Screenshot 2023-05-03 at 2 32 48 AM" src="https://user-images.githubusercontent.com/496914/235881083-f47d21ff-2462-46f9-acc2-e900316fe05f.png">
+
+*Strawberry-Rhubarb Pie... Tasty!*
+
 ## Rhubarb at a glance
 
 * Asyncio Native
@@ -63,14 +67,17 @@ class Query:
     def all_people(self, info: Info) -> ObjectSet[Person, ModelSelector[Person]]:
         return query(Person, get_conn(info), info)
 
-
+    
 schema = Schema(
     query=Query,
+    mutation=Mutation,
     extensions=[
         RhubarbExtension
     ]
 )
 ```
+
+### Using GQL as an ORM client
 
 Now we can use our schema to make queries and Rhubarb will try to optimize them for you.
 
@@ -107,6 +114,24 @@ async with connection() as conn:
 
 You can either use Rhubarb stand alone or integrate it with FastAPI and Strawberry for a web service.
 
+### Without GQL
+
+You can also make queries outside of GQL like a normal ORM. However the optimizations won't benefit you once you convert it into a list or concrete instance.
+
+```python
+from rhubarb import query, Desc
+from rhubarb.connection import connection
+
+
+async with connection() as conn:
+    person_list: list[Person] = await query(Person, conn).as_list()
+    limited_person_list: list[Person] = await query(Person, conn).where(lambda x: x.a_bool_column == True).limit(5).as_list()
+    other_table_list: list[TableWithoutSuperClass] = await query(Person, conn).select(lambda x: x.other_table()).as_list()
+    bool_list: list[bool] = await query(Person, conn).select(lambda x: x.int_is_big()).as_list()
+    one_person = await query(Person, conn).one()
+    recent_person = await query(Person, conn).order_by(lambda x: Desc(x.example_date_col)).one()
+```
+
 ### Virtual Columns
 
 These Strawberry Types are different from standard Python objects. methods decorated with `virtual_column` and `field` are not executed in Python. These methods are pushed down and transformed into SQL to be executed on the Postgres Server.
@@ -140,7 +165,6 @@ class Person(BaseModel):
             default=Value("Excellent")
         )
 ```
-
 
 ### Relations
 
@@ -238,7 +262,7 @@ Sometimes you may not want to have all your computations be in SQL. If you want 
 ```python
 import uuid
 import asyncio
-from rhubarb import BaseModel, column, table, relation, python_field
+from rhubarb import BaseModel, column, table, relation, python_field, virtual_column
 from rhubarb.functions import concat
 
 
@@ -280,6 +304,57 @@ class Person(BaseModel):
         return f"{sql_full_name} from {address.city} {address.state}"
 ```
 
+# Mutations
+
+Insert, Update, Delete are also optimized for GQL and can be used in Mutations.
+
+```python
+import uuid
+from rhubarb import Schema, ModelSelector, ModelUpdater, RhubarbExtension, type, \
+    get_conn, mutation, update, query, save
+from rhubarb.functions import concat
+from strawberry.types import Info
+
+
+@type
+class Mutation:
+    @mutation
+    def update_person(self, info: Info, person_id: uuid.UUID, new_name: str) -> Person:
+        def do(person: ModelUpdater[Person]):
+            # With Update expressions, we can use computations and reference sql fields and joins.
+            person.title = concat(
+                new_name, "(Old Name: ", person.title, ")"
+            )
+
+        def where(person: ModelSelector[Person]):
+            return person.id == person_id
+
+        # Even though this mutation is not async, we are returning an UpdateSet which will
+        # be executed by Rhubarb async middleware.
+        return update(Person, get_conn(info), do, where, info=info, one=True)
+
+    @mutation
+    async def update_name(
+        self, info: Info, person_id: uuid.UUID, new_name: str
+    ) -> Person:
+        # Or avoid the optimization extension and just use await statements. 
+        obj = (
+            await query(Person, get_conn(info))
+            .where(lambda book: book.id == person_id)
+            .one()
+        )
+        obj.title = new_name
+        return await save(obj, get_conn(info), info=info)
+
+    
+schema = Schema(
+    query=Query,
+    mutation=Mutation,
+    extensions=[
+        RhubarbExtension
+    ]
+)
+```
 # Migrations
 
 Rhubarb has basic support for migrations. It will watch for new, changed columns and tables.
