@@ -1,14 +1,12 @@
 import datetime
 import random
-import uuid
 
 import pytest_asyncio
-from psycopg import AsyncConnection
 
-from rhubarb.connection import connection
+from strawberry.scalars import JSON
 
 import uuid
-from typing import Self, Optional
+from typing import Optional
 
 import pytest
 import strawberry
@@ -18,6 +16,7 @@ from strawberry.types import Info
 from rhubarb.core import get_conn
 from rhubarb.crud import delete, save, insert_objs, update, query
 from rhubarb.extension import RhubarbExtension
+from rhubarb.fixtures import *  # noqa
 from rhubarb.migrations.utils import reset_db_and_fast_forward
 from rhubarb.model import BaseUpdatedAtModel
 from rhubarb.functions import (
@@ -42,55 +41,6 @@ from rhubarb.object_set import (
     References,
     references,
 )
-
-
-@pytest_asyncio.fixture
-async def postgres_connection() -> AsyncConnection:
-    async with connection() as conn:
-        async with conn.transaction(force_rollback=True):
-            yield conn
-
-
-@pytest_asyncio.fixture
-async def created_tables(postgres_connection):
-    r1 = str(uuid.uuid4())
-    r2 = str(uuid.uuid4())
-    om1 = str(uuid.uuid4())
-    om2 = str(uuid.uuid4())
-    mm1 = str(uuid.uuid4())
-    mm2 = str(uuid.uuid4())
-
-    await postgres_connection.execute(
-        f"""
-    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-    DROP TABLE IF EXISTS ratings_model;
-    CREATE TABLE IF NOT EXISTS ratings_model
-    ( id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-      rating integer
-    );
-
-    DROP TABLE IF EXISTS other_model;
-    CREATE TABLE IF NOT EXISTS other_model
-    ( id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-      name text,
-      rating_id uuid NOT NULL 
-    );
-
-    DROP TABLE IF EXISTS my_model;
-    CREATE TABLE IF NOT EXISTS my_model
-    ( id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-      other text NULL,
-      created_at timestamptz NOT NULL DEFAULT NOW(),
-      updated_at timestamptz NOT NULL DEFAULT NOW(),
-      parent_id uuid NOT NULL 
-    );
-
-    INSERT INTO ratings_model(id, rating) VALUES ('{r1}'::UUID, 1), ('{r2}'::UUID, 5);
-    INSERT INTO other_model(id, name, rating_id) VALUES ('{om1}'::UUID, 'm1', '{r1}'::UUID), ('{om2}'::UUID, 'm2', '{r2}'::UUID);
-    INSERT INTO my_model(id, parent_id) VALUES ('{mm1}'::UUID, '{om1}'::UUID), ('{mm2}'::UUID, '{om2}'::UUID);
-    """
-    )
 
 
 @pytest.fixture
@@ -184,18 +134,17 @@ async def basic_data(postgres_connection, run_migrations):
     }
 
 
-testing_registry = Registry()
+testing_registry = Registry(prefix="testing_")
 
 
 @table(registry=testing_registry)
 class Reviewer(BaseUpdatedAtModel):
-    __table__ = "reviewers"
     name: str = column()
 
 
 @table(registry=testing_registry)
 class Author(BaseUpdatedAtModel):
-    __table__ = "authors"
+    __table__ = "custom_author_name"
     name: str = column()
 
     @relation(graphql_type=list["Book"])
@@ -209,11 +158,12 @@ class Author(BaseUpdatedAtModel):
 
 @table(registry=testing_registry)
 class Book(BaseUpdatedAtModel):
-    __table__ = "books"
     title: str = column()
-    comments: Optional[str] = column(default="null")
-    author_id: uuid.UUID = references(Author.__table__)
+    comments: Optional[str] = column(sql_default=None)
+    author_id: uuid.UUID = references(Author.__table__, on_delete="RESTRICT")
     published_on: datetime.date = column()
+    meta_info: Optional[JSON] = column(sql_default=None)
+    public: bool = column(sql_default=False)
 
     @relation
     def author(self, author: Author):
@@ -254,12 +204,13 @@ class Book(BaseUpdatedAtModel):
 
 @table(registry=testing_registry)
 class RatingModel(BaseUpdatedAtModel):
-    __table__ = "ratings_model"
     rating: int = column()
     book_id: uuid.UUID = column(
         references=References(Book.__table__, on_delete="CASCADE")
     )
-    reviewer_id: uuid.UUID = column(references=References(Reviewer.__table__))
+    reviewer_id: uuid.UUID = column(
+        references=References(Reviewer.__table__, on_delete="SET NULL")
+    )
     published_on: datetime.datetime = column(insert_default="now()")
 
     @relation
@@ -290,15 +241,16 @@ class RatingModel(BaseUpdatedAtModel):
         return {"rating_idx": Index(on=self.rating)}
 
 
-@table(registry=None)
+@table(skip_registry=True)
 class RatingsByBook(RatingModel):
-    __pk__ = "book_id"
-
     @virtual_column
     def avg_rating(self: ModelSelector) -> int:
         return avg_agg(self, self.rating)
 
     def __group_by__(self):
+        return self.book_id
+
+    def __order_by__(self):
         return self.book_id
 
 

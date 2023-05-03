@@ -10,6 +10,8 @@ from psycopg.rows import Row
 from asgiref.local import Local
 import time
 
+from rhubarb.config import config
+
 
 class QueryListener(Protocol):
     def new_query(self, query: Query, params: Optional[Params], duration_ns):
@@ -32,19 +34,20 @@ class QueryTracker(QueryListener):
 
 
 class LocalQueryListeners:
-    listeners: dict[str, QueryListener]
+    listeners: dict[int, QueryListener]
 
     def __init__(self):
-        self.listeners: dict[str, QueryListener] = {}
+        self.listeners: dict[int, QueryListener] = {}
 
-    def register(self, listener_id, listener: QueryListener):
+    def register(self, listener_id: int, listener: QueryListener):
         self.listeners[listener_id] = listener
 
-    def unregister(self, listener_id):
+    def unregister(self, listener_id: int):
         del self.listeners[listener_id]
 
     def new_query(self, query, params, duration_ns):
         logging.debug(f"[QUERY] {query}")
+        print(f"[QUERY] {query}")
         for listener in self.listeners.values():
             listener.new_query(query, params, duration_ns)
 
@@ -55,7 +58,7 @@ local_queries = LocalQueryListeners()
 @contextmanager
 def track_queries() -> ContextManager[QueryTracker]:
     tracker = QueryTracker()
-    tracker_id = str(time.monotonic_ns())
+    tracker_id = time.monotonic_ns()
     local_queries.register(tracker_id, tracker)
     try:
         yield tracker
@@ -68,20 +71,6 @@ class AsyncConnectionWithStats(AsyncConnection):
         super().__init__(*args, **kwargs)
         self._executed_queries = deque(maxlen=500)
         self.cursor_factory = AsyncCursorWithStats
-
-    async def execute(
-        self,
-        query: Query,
-        params: Optional[Params] = None,
-        *,
-        prepare: Optional[bool] = None,
-        binary: bool = False,
-    ) -> AsyncCursor[Row]:
-        start_ns = time.perf_counter_ns()
-        result = await super().execute(query, params, prepare=prepare, binary=binary)
-        end_ns = time.perf_counter_ns()
-        local_queries.new_query(query, params, end_ns - start_ns)
-        return result
 
 
 class AsyncCursorWithStats(AsyncCursor):
@@ -101,8 +90,8 @@ class AsyncCursorWithStats(AsyncCursor):
 
 
 @asynccontextmanager
-async def connection(*args, **kwds):
-    async with await AsyncConnectionWithStats.connect(
-        host="localhost", dbname="debug", password="debug", user="debug"
-    ) as conn:
+async def connection(**kwds):
+    for k, v in dataclasses.asdict(config().postgres).items():
+        kwds.setdefault(k, v)
+    async with await AsyncConnectionWithStats.connect(**kwds) as conn:
         yield conn

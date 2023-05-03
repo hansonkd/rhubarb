@@ -4,10 +4,8 @@ import copy
 import logging
 import os
 import sys
-from pathlib import Path
 
-from psycopg import AsyncConnection
-
+from rhubarb.config import config
 from rhubarb.connection import connection
 from rhubarb.migrations.data import MigrationStateDatabase
 from rhubarb.migrations.utils import (
@@ -18,29 +16,36 @@ from rhubarb.migrations.utils import (
 from rhubarb.migrations.models import migration_was_applied, mark_migration_as_applied
 
 
-async def run_migrations(migration_dir="./migrations", check=False) -> bool:
+async def run_migrations(check=False) -> bool:
     async with connection() as conn:
-        migration_dir = Path(migration_dir)
+        migration_dir = config().migration_directory
         head_migrations, current_migrations = load_migrations(migration_dir)
         current_state = current_migration_state(head_migrations, current_migrations)
-        target_state = MigrationStateDatabase.from_registry()
+        target_state = MigrationStateDatabase.from_registry(config().registry)
 
-        async with conn.transaction(force_rollback=check):
-            for migration_id in current_migration_queue(
-                head_migrations, current_migrations
-            ):
-                logging.info(f"Applying {migration_id}")
-                migrations = current_migrations[migration_id]
-                was_applied = migration_was_applied(conn, migration_id)
-                if not was_applied:
-                    for op in migrations.operations:
+        for migration_id in current_migration_queue(
+            head_migrations, current_migrations
+        ):
+            logging.info(f"Applying {migration_id}")
+            migration = current_migrations[migration_id]
+
+            was_applied = migration_was_applied(conn, migration_id)
+            if not was_applied:
+                if migration.atomic:
+                    async with conn.transaction(force_rollback=check):
+                        for op in migration.operations:
+                            await op.run(current_state, conn)
+                            current_state = op.forward(copy.deepcopy(current_state))
+                else:
+                    for op in migration.operations:
                         await op.run(current_state, conn)
                         current_state = op.forward(copy.deepcopy(current_state))
-                    await mark_migration_as_applied(conn, migration_id)
-            return target_state == current_state
+                await mark_migration_as_applied(conn, migration_id)
+        return target_state == current_state
 
 
 if __name__ == "__main__":
+    init_rhubarb()
     parser = argparse.ArgumentParser(
         prog="rhubarb.migrations.make",
         description="Make new migrations based on the state of your program's tables",

@@ -8,6 +8,7 @@ from typing import Iterator
 
 from psycopg import AsyncConnection
 
+from rhubarb.core import Unset
 from rhubarb.migrations.data import (
     MigrationStateDatabase,
     Migration,
@@ -19,6 +20,14 @@ from rhubarb.migrations.data import (
     DropTable,
     CreateTable,
     SetMeta,
+    SetDefault,
+    AlterTypeUsing,
+    DropDefault,
+    AddReferencesConstraint,
+    DropConstraint,
+    AddConstraint,
+    AddIndex,
+    DropIndex,
 )
 
 from rhubarb.errors import RhubarbException
@@ -26,6 +35,12 @@ from rhubarb.object_set import Registry
 
 
 def find_diffs(
+    old_state: MigrationStateDatabase, new_state: MigrationStateDatabase
+) -> list[MigrationOperation]:
+    return list(iter_find_diffs(old_state, new_state))
+
+
+def iter_find_diffs(
     old_state: MigrationStateDatabase, new_state: MigrationStateDatabase
 ) -> Iterator[MigrationOperation]:
     new_meta_kvs = {}
@@ -104,12 +119,128 @@ def find_diffs(
                 )
             )
 
+        kept_column_names = old_table.columns.keys() & new_table.columns.keys()
+        for column_name in kept_column_names:
+            old_column_value = old_table.columns[column_name]
+            new_column_value = new_table.columns[column_name]
+            if old_column_value.type.raw_sql != new_column_value.type.raw_sql:
+                altered_statements.append(
+                    AlterTypeUsing(name=column_name, new_type=new_column_value.type)
+                )
+
+            if old_column_value.references != new_column_value.references:
+                if new_column_value.references:
+                    if old_column_value.references:
+                        altered_statements.append(
+                            DropConstraint(
+                                constraint_name=old_column_value.references.compute_constraint_name(
+                                    column_name
+                                )
+                            )
+                        )
+                    altered_statements.append(
+                        AddReferencesConstraint(
+                            name=column_name,
+                            references=new_column_value.references,
+                            constraint_name=new_column_value.references.compute_constraint_name(
+                                column_name
+                            ),
+                        )
+                    )
+                else:
+                    altered_statements.append(
+                        DropConstraint(
+                            constraint_name=old_column_value.references.compute_constraint_name(
+                                column_name
+                            )
+                        )
+                    )
+
+            if old_column_value.default != new_column_value.default:
+                if not isinstance(new_column_value.default, Unset):
+                    altered_statements.append(
+                        SetDefault(name=column_name, default=new_column_value.default)
+                    )
+                else:
+                    altered_statements.append(DropDefault(name=column_name))
+
+        new_constraints_names = (
+            new_table.constraints.keys() - old_table.constraints.keys()
+        )
+        for constraint_name in new_constraints_names:
+            constraint_to_create = new_table.constraints[constraint_name]
+            altered_statements.append(
+                AddConstraint(
+                    constraint_name=constraint_name,
+                    constraint=constraint_to_create,
+                )
+            )
+
+        deleted_constraint_names = (
+            old_table.constraints.keys() - new_table.constraints.keys()
+        )
+        for constraint_name in deleted_constraint_names:
+            altered_statements.append(
+                DropConstraint(
+                    constraint_name=constraint_name,
+                )
+            )
+
+        kept_constraint_names = (
+            old_table.constraints.keys() & new_table.constraints.keys()
+        )
+        for constraint_name in kept_constraint_names:
+            old_constraint = old_table.constraints[constraint_name]
+            new_constraint = new_table.constraints[constraint_name]
+
+            if old_constraint != new_constraint:
+                altered_statements.append(
+                    DropConstraint(
+                        constraint_name=constraint_name,
+                    )
+                )
+                altered_statements.append(
+                    AddConstraint(
+                        constraint_name=constraint_name, constraint=new_constraint
+                    )
+                )
+
         if altered_statements:
             yield AlterTable(
                 schema=new_table.schema,
                 name=new_table.name,
                 alter_operations=altered_statements,
             )
+
+        new_indexes_names = new_table.indexes.keys() - old_table.indexes.keys()
+        for index_name in new_indexes_names:
+            index_to_create = new_table.indexes[index_name]
+            yield AddIndex(
+                table_name=table_name,
+                index_name=index_name,
+                index=index_to_create,
+            )
+
+        deleted_indexes_names = old_table.indexes.keys() - new_table.indexes.keys()
+        for index_name in deleted_indexes_names:
+            yield DropIndex(
+                table_name=table_name,
+                index_name=index_name,
+            )
+
+        kept_index_names = old_table.indexes.keys() & new_table.indexes.keys()
+        for index_name in kept_index_names:
+            old_index = old_table.indexes[index_name]
+            new_index = new_table.indexes[index_name]
+
+            if old_index != new_index:
+                yield DropIndex(
+                    table_name=table_name,
+                    index_name=index_name,
+                )
+                yield AddIndex(
+                    table_name=table_name, index_name=index_name, index=new_index
+                )
 
 
 def run_operations(
@@ -216,6 +347,14 @@ async def reset_db_and_fast_forward(conn: AsyncConnection, registry: Registry):
     current_state = MigrationStateDatabase()
     new_state = MigrationStateDatabase.from_registry(registry)
     await drop_tables_in_state(conn, new_state)
+    await fast_forward(conn, current_state, new_state)
+
+
+async def fast_forward(
+    conn: AsyncConnection,
+    current_state: MigrationStateDatabase,
+    new_state: MigrationStateDatabase,
+):
     for op in find_diffs(old_state=current_state, new_state=new_state):
         await op.run(current_state, conn)
         current_state = op.forward(current_state)

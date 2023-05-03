@@ -2,21 +2,19 @@ import argparse
 import logging
 import os
 import sys
-from pathlib import Path
 
+from rhubarb.config import config, init_rhubarb
 from rhubarb.migrations.data import MigrationStateDatabase
 from rhubarb.migrations.utils import (
     generate_migration_file,
     current_migration_state,
     load_migrations,
 )
-from rhubarb.object_set import Registry
 
 
-def make_migration(
-    migration_dir="./migrations", check=False, empty=False, registry: Registry = None
-) -> bool:
-    migration_dir = Path(migration_dir)
+def make_migration(check=False, empty=False) -> bool:
+    migration_dir = config().migration_directory
+    registry = config().registry
     head_migrations, current_migrations = load_migrations(migration_dir)
     old_state = current_migration_state(head_migrations, current_migrations)
     new_state = MigrationStateDatabase.from_registry(registry)
@@ -41,6 +39,7 @@ def make_migration(
 
 
 if __name__ == "__main__":
+    init_rhubarb()
     parser = argparse.ArgumentParser(
         prog="rhubarb.migrations.cmd.make",
         description="Make new migrations based on the state of your program's tables",

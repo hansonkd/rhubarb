@@ -1,10 +1,9 @@
 import argparse
 import asyncio
-import logging
 import os
 import sys
-from pathlib import Path
 
+from rhubarb.config import config, init_rhubarb
 from rhubarb.connection import connection
 from rhubarb.migrations.utils import (
     current_migration_state,
@@ -13,9 +12,9 @@ from rhubarb.migrations.utils import (
 )
 
 
-async def drop_tables(migration_dir="./migrations", check=False):
+async def drop_tables(check=False):
     async with connection() as conn:
-        migration_dir = Path(migration_dir)
+        migration_dir = config().migration_directory
         head_migrations, current_migrations = load_migrations(migration_dir)
         current_state = current_migration_state(head_migrations, current_migrations)
         async with conn.transaction(force_rollback=check):
@@ -23,6 +22,7 @@ async def drop_tables(migration_dir="./migrations", check=False):
 
 
 if __name__ == "__main__":
+    init_rhubarb()
     parser = argparse.ArgumentParser(
         prog="rhubarb.migrations.cmd.reset",
         description="Drop all tables in the current migration state.",

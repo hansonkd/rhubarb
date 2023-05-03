@@ -1,10 +1,21 @@
 from typing import Any, Callable
 
 from rhubarb.core import V
-from rhubarb.object_set import ModelSelector, Aggregate, Selector, SqlType, Computed, Case, Value, UseSelector, func
+from rhubarb.object_set import (
+    ModelSelector,
+    Aggregate,
+    Selector,
+    SqlType,
+    Computed,
+    Case,
+    Value,
+    UseSelector,
+    func,
+)
 
 
 func = func
+
 
 def sum_agg(model_selector: ModelSelector, sel: Selector):
     return Aggregate(model_selector, args=[sel], op="SUM", infixed=False)

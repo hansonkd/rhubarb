@@ -6,7 +6,6 @@ import dataclasses
 import datetime
 import functools
 import inspect
-import time
 import uuid
 from collections import defaultdict
 from typing import (
@@ -46,6 +45,7 @@ from rhubarb.core import (
     new_ref_id,
     SQLValue,
     default_function_to_python,
+    Unset,
 )
 from rhubarb.errors import RhubarbException
 from strawberry.field import StrawberryField
@@ -68,13 +68,15 @@ class SqlType:
     def to_python(self) -> Type:
         if self.python_type:
             return self.python_type
-        match self.raw_sql:
+        match self.raw_sql.upper():
             case "BIGINT":
                 return int
             case "FLOAT":
                 return float
             case "TEXT":
                 return str
+            case "BOOLEAN":
+                return bool
             case "BYTEA":
                 return bytes
             case "TIMESTAMPTZ":
@@ -96,10 +98,14 @@ class SqlType:
     def from_python(cls, t: StrawberryType | type):
         if hasattr(t, "__sql_type__"):
             return t.__sql_type__()
+        elif t == JSON:
+            return cls(raw_sql="JSONB")
         elif isinstance(t, StrawberryOptional):
             inner_type = cls.from_python(t.of_type)
             inner_type.optional = True
             return inner_type
+        elif issubclass(t, bool):
+            return cls(raw_sql="BOOLEAN")
         elif issubclass(t, int):
             return cls(raw_sql="BIGINT")
         elif issubclass(t, float):
@@ -114,8 +120,6 @@ class SqlType:
             return cls(raw_sql="DATE")
         elif issubclass(t, uuid.UUID):
             return cls(raw_sql="UUID")
-        elif issubclass(t, JSON):
-            return cls(raw_sql="JSONB")
         raise RhubarbException(
             f"InvalidSQL Type: {t} cannot be made into a valid SQLType"
         )
@@ -178,13 +182,15 @@ class SQLBuilder:
         if hasattr(v, "__sql__"):
             v.__sql__(self)
         else:
-            sql_type = SqlType.from_python(type(v))
-
-            if self.dml_mode:
-                self.write(f"'{v}'::{sql_type.raw_sql}")
+            if v is None:
+                self.write("NULL")
             else:
-                self.write(f"%s::{sql_type.raw_sql}")
-                self.vars.append(v)
+                sql_type = SqlType.from_python(type(v))
+                if self.dml_mode:
+                    self.write(f"'{v}'::{sql_type.raw_sql}")
+                else:
+                    self.write(f"%s::{sql_type.raw_sql}")
+                    self.vars.append(v)
 
 
 def call_with_maybe_info(f, obj, info):
@@ -275,20 +281,6 @@ class Extractor(Generic[V]):
     async def extract(self, row) -> V:
         raise NotImplementedError
 
-    def for_field(
-        self, model_reference: ModelReference, field: StrawberryField[V]
-    ) -> Optional[Self]:
-        if self.model_reference is None or self.field is None:
-            return None
-
-        if (
-            self.model_reference.id == model_reference.id
-            and self.field.name == field.name
-        ):
-            return self
-        else:
-            return None
-
     def reset_cache(self):
         return {}
 
@@ -314,13 +306,6 @@ class ListExtractor(Extractor[list[V]]):
 
     def unwrap(self):
         return self.inner_extractor.unwrap()
-
-    def for_field(
-        self, model_reference: ModelReference, field: StrawberryField[V]
-    ) -> Optional[Self]:
-        if found := super().for_field(model_reference, field):
-            return found
-        return self.inner_extractor.for_field(model_reference, field)
 
     def reset_cache(self):
         return defaultdict(list)
@@ -362,13 +347,6 @@ class WrappedExtractor(Extractor[V]):
     async def extract(self, row) -> V:
         return await self.extractor.extract(row)
 
-    def for_field(
-        self, model_reference: ModelReference, field: StrawberryField[V]
-    ) -> Optional[Self]:
-        if extractor := super().for_field(model_reference, field):
-            return extractor
-        return self.extractor.for_field(model_reference, field)
-
     def unwrap(self):
         return self.extractor.unwrap()
 
@@ -386,7 +364,7 @@ class ModelExtractor(Extractor[V]):
         super().__init__(model_reference, field)
 
     def add_to_cache(self, cache, k, v):
-        if not hasattr(v, "__pk__"):
+        if not hasattr(v, "__pk__") or hasattr(v, "__group_by__"):
             v._cached_pk = k
         return super().add_to_cache(cache, k, v)
 
@@ -401,15 +379,6 @@ class ModelExtractor(Extractor[V]):
             if k not in kwargs:
                 kwargs[k] = UNSET
         return self.model(**kwargs)
-
-    def for_field(
-        self, model_reference: ModelReference, field: StrawberryField[V]
-    ) -> Optional[Self]:
-        if found := super().for_field(model_reference, field):
-            return found
-        for _, field_extractor in self.field_aliases.values():
-            if found := field_extractor.for_field(model_reference, field):
-                return found
 
     def sub_extractor(self, fn: str) -> Optional[Extractor]:
         if field := self.field_aliases.get(fn):
@@ -444,15 +413,6 @@ class DictExtractor(Extractor[V]):
     async def extract(self, row) -> dict[str, SQLValue]:
         return {k: await v.extract(row) for k, v in self.key_aliases.items()}
 
-    def for_field(
-        self, model_reference: ModelReference, field: StrawberryField[V]
-    ) -> Optional[Self]:
-        if found := super().for_field(model_reference, field):
-            return found
-        for field_extractor in self.key_aliases.values():
-            if found := field_extractor.for_field(model_reference, field):
-                return found
-
 
 class TupleExtractor(Extractor[V]):
     def __init__(
@@ -466,15 +426,6 @@ class TupleExtractor(Extractor[V]):
 
     async def extract(self, row) -> tuple[SQLValue, ...]:
         return tuple(await v.extract(row) for v in self.tuple_aliases)
-
-    def for_field(
-        self, model_reference: ModelReference, field: StrawberryField[V]
-    ) -> Optional[Self]:
-        if found := super().for_field(model_reference, field):
-            return found
-        for field_extractor in self.tuple_aliases:
-            if found := field_extractor.for_field(model_reference, field):
-                return found
 
 
 class Selector(Generic[V]):
@@ -938,6 +889,7 @@ class ModelSelector(Selector[T]):
         self._model_reference = model_reference
         self._selected_fields = selected_fields
         self._selected_lookup = {}
+        self._join = join
 
         if selected_fields is None:
             self._selection_names = {
@@ -946,9 +898,7 @@ class ModelSelector(Selector[T]):
         else:
             self._selected_lookup = {f.name: f for f in selected_fields}
             self._selection_names = {f.name for f in selected_fields}
-        self._selection_names |= pk_column_names(self._model_reference.model)
-        self._columns = {}
-        self._join = join
+        self._selection_names |= pk_column_names(self._model_reference.model, self)
 
     def __repr__(self):
         return f"ModelSelector({self._model_reference}, {self._selection_names})"
@@ -1244,23 +1194,13 @@ class ObjectSet(Generic[T, S]):
         new_self.sync_joins(new_self.selection)
         return new_self
 
-    def from_cache_extractors(self, model_reference, field):
-        if pk_extractor := self.cache_main_extractor.for_field(model_reference, field):
-            return pk_extractor
-        elif pk_extractor := self.cache_pk_extractor.for_field(model_reference, field):
-            return pk_extractor
-
     async def sync_cache(self, new_self):
         if (
             self.row_cache is not None
             and self.cache is not None
             and (isinstance(new_self.selection, WrappedSelector))
         ):
-            # model_pk = pk_columns(new_self.model_reference.model)
             selection = new_self.selection
-
-            # model_ref = new_self.model_reference
-
             field = selection.__field__()
             if not field:
                 return
@@ -1268,21 +1208,32 @@ class ObjectSet(Generic[T, S]):
             parent_selector = self.selection.__inner_selector__()
 
             if isinstance(parent_selector, ModelSelector):
+                self.cache_main_extractor.unwrap().sub_extractor(field.name)
                 # The parent was a model, so this value's should be keyed off that selector instead of it's parent
                 model_ref = parent_selector.__model_reference__()
-                model_pk = pk_columns(model_ref.model)
+                if hasattr(model_ref.model, "__group_by__"):
+                    model_pk = resolve_group_by(model_ref.model, parent_selector)
+                    if isinstance(model_pk, tuple):
+                        model_pk = tuple(f.__field__() for f in model_pk)
+                    else:
+                        model_pk = model_pk.__field__()
+                else:
+                    model_pk = pk_columns(model_ref.model)
                 # If we can't make an extractor from the parent extractors, bail on cache sync...
                 if isinstance(model_pk, tuple):
                     pk_extractors = []
-
                     for pk in model_pk:
-                        if pk_extractor := self.from_cache_extractors(model_ref, pk):
+                        if pk_extractor := self.cache_main_extractor.unwrap().sub_extractor(
+                            pk.name
+                        ):
                             pk_extractors.append(pk_extractor)
                         else:
                             return
                     pk_extractor = TupleExtractor(pk_extractors, None, None)
                 else:
-                    if pk_extractor := self.from_cache_extractors(model_ref, model_pk):
+                    if pk_extractor := self.cache_main_extractor.unwrap().sub_extractor(
+                        model_pk.name
+                    ):
                         pk_extractor = pk_extractor
                     else:
                         return
@@ -1846,27 +1797,44 @@ def pk_concrete(
 ) -> ColumnSelector[V] | tuple[ColumnSelector[V], ...]:
     if cached_pk := getattr(obj, "_cached_pk", None):
         return cached_pk
-    model_pk = getattr(obj, "__pk__")
+    if hasattr(obj, "__group_by__"):
+        model_pk = pk_column_names(obj.__class__)
+    else:
+        model_pk = getattr(obj, "__pk__")
     if isinstance(model_pk, str):
         return getattr(obj, model_pk)
     return tuple([getattr(obj, pk) for pk in model_pk])
 
 
 def pk_column_names(
-    model: T,
+    model,
+    selector: ModelSelector = None,
 ) -> set[str]:
-    if isinstance(model.__pk__, str):
-        return {model.__pk__}
-    return set(model.__pk__)
+    if selector and hasattr(model, "__group_by__"):
+        gb = resolve_group_by(model, selector)
+        if isinstance(gb, tuple):
+            gb = tuple(f.__field__().name for f in gb)
+        else:
+            gb = gb.__field__().name
+        model_pk = gb
+    else:
+        model_pk = getattr(model, "__pk__")
+    if isinstance(model_pk, str):
+        return {model_pk}
+    return set(model_pk)
 
 
 def pk_selection(
-    model: ModelSelector[T],
+    model_selector: ModelSelector[T],
 ) -> ColumnSelector[V] | tuple[ColumnSelector[V], ...]:
-    model_pk = model._model_reference.model.__pk__
+    model_ref = model_selector.__model_reference__()
+    model = model_ref.model
+    if hasattr(model, "__group_by__"):
+        return resolve_group_by(model, model_selector)
+    model_pk = model.__pk__
     if isinstance(model_pk, str):
-        return getattr(model, model_pk)
-    return tuple([getattr(model, pk) for pk in model_pk])
+        return getattr(model_selector, model_pk)
+    return tuple([getattr(model_selector, pk) for pk in model_pk])
 
 
 def is_rhubarb_field(field: StrawberryField):
@@ -1884,10 +1852,12 @@ def columns(
         if isinstance(field, ColumnField):
             if virtual is not None and field.virtual != virtual:
                 continue
-            if insert_default is not None and field.insert_default != insert_default:
-                continue
-            if update_default is not None and field.update_default != update_default:
-                continue
+            if insert_default is not None:
+                if insert_default and isinstance(field.insert_default, Unset):
+                    continue
+            if update_default is not None:
+                if update_default and isinstance(field.update_default, Unset):
+                    continue
         elif isinstance(field, RelationField):
             if (
                 inlinable
@@ -1935,6 +1905,7 @@ def joins(selector: Selector, seen=None) -> Iterator[(str, Join, str)]:
 @dataclasses.dataclass
 class References:
     table_name: str | Callable[[], str] | None
+    constraint_name: str | None = None
     on_delete: ON_DELETE | None = None
 
     @property
@@ -1988,10 +1959,10 @@ def column(
     column_name: Optional[str] = None,
     description: Optional[str] = None,
     permission_classes: List[Type[BasePermission]] = (),  # type: ignore
-    default: DEFAULT_SQL_FUNCTION = dataclasses.MISSING,
-    insert_default: DEFAULT_SQL_FUNCTION = dataclasses.MISSING,
-    update_default: DEFAULT_SQL_FUNCTION = dataclasses.MISSING,
-    sql_default: DEFAULT_SQL_FUNCTION = dataclasses.MISSING,
+    default: Any = dataclasses.MISSING,
+    insert_default: DEFAULT_SQL_FUNCTION = UNSET,
+    update_default: DEFAULT_SQL_FUNCTION = UNSET,
+    sql_default: DEFAULT_SQL_FUNCTION = UNSET,
     default_factory: Union[Callable[[], Any], object] = dataclasses.MISSING,
     metadata: Optional[Mapping[Any, Any]] = None,
     deprecation_reason: Optional[str] = None,
@@ -1999,12 +1970,14 @@ def column(
     graphql_type: Optional[Any] = None,
     extensions: List[FieldExtension] = (),  # type: ignore
 ):
-    if (
-        insert_default != dataclasses.MISSING or update_default != dataclasses.MISSING
-    ) and default_factory == dataclasses.MISSING:
-        default_factory = default_function_to_python(
-            insert_default if update_default == dataclasses.MISSING else update_default
-        )
+    if update_default != UNSET and insert_default == UNSET:
+        insert_default = update_default
+
+    if insert_default != UNSET and sql_default == UNSET:
+        sql_default = insert_default
+
+    if (insert_default != UNSET) and default_factory == dataclasses.MISSING:
+        default_factory = default_function_to_python(insert_default)
     elif not virtual and default == dataclasses.MISSING:
         default = UNSET
 
@@ -2086,6 +2059,7 @@ def table(
     description: Optional[str] = None,
     directives: Optional[Sequence[object]] = (),
     extend: bool = False,
+    skip_registry: bool = False,
 ) -> Callable[[Type[T]], Type[T]]:
     ...
 
@@ -2099,6 +2073,7 @@ def table(
     description: Optional[str] = None,
     directives: Optional[Sequence[object]] = (),
     extend: bool = False,
+    skip_registry: bool = False,
 ) -> Type[T]:
     ...
 
@@ -2106,34 +2081,37 @@ def table(
 def table(
     cls: Optional[Type] = None,
     *,
-    registry: Optional[Registry] = DEFAULT_REGISTRY,
+    registry: Registry = DEFAULT_REGISTRY,
     name: Optional[str] = None,
     description: Optional[str] = None,
     directives: Optional[Sequence[object]] = (),
     extend: bool = False,
+    skip_registry=False,
 ):
+    registry = registry
+
     if cls:
-        new_type = strawberry.type(
+        real_cls = strawberry.type(
             cls,
             name=name,
             description=description,
             directives=directives,
             extend=extend,
         )
-        set_real_table_name(registry, new_type)
-        if registry is not None:
-            registry.add_entry(new_type)
-        return new_type
+        set_real_table_name(registry, real_cls)
+        if not skip_registry and not hasattr(real_cls, "__group_by__"):
+            registry.add_entry(real_cls)
+        return real_cls
     else:
-        new_type = strawberry.type(
+        type_maker = strawberry.type(
             name=name, description=description, directives=directives, extend=extend
         )
 
         def wrapper(real_cls):
             set_real_table_name(registry, real_cls)
-            if registry is not None:
+            if not skip_registry and not hasattr(real_cls, "__group_by__"):
                 registry.add_entry(real_cls)
-            return new_type(real_cls)
+            return type_maker(real_cls)
 
         return wrapper
 
@@ -2273,8 +2251,6 @@ def optimize_selection(selected_fields: SelectedFields, selection):
     return selection
 
 
-
-
 def python_field(
     depends_on: Callable[
         [ModelSelector], list[Selector] | Selector | dict[str, Selector]
@@ -2343,3 +2319,12 @@ class Constraint:
 
 def func(fn: str, *args: Selector, infixed=False):
     return Computed(list(args), op=fn, infixed=infixed)
+
+
+def resolve_group_by(model: SupportsSqlModel, selector: ModelSelector):
+    gb_result = model.__group_by__(selector)
+    if isinstance(gb_result, tuple):
+        model_pk = tuple(f for f in gb_result)
+    else:
+        model_pk = gb_result
+    return model_pk

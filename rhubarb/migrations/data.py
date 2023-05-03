@@ -2,7 +2,7 @@ import copy
 import inspect
 import json
 import pprint
-from typing import Callable, Type, Any, Awaitable, Optional
+from typing import Callable, Type, Any, Awaitable, Optional, Self
 from rhubarb.core import SupportsSqlModel, T, UNSET, DEFAULT_SQL_FUNCTION, Unset
 from rhubarb.errors import RhubarbException
 from rhubarb.object_set import (
@@ -15,13 +15,41 @@ from rhubarb.object_set import (
     pk_column_names,
     Index,
     Constraint,
-    ModelSelector,
     ObjectSet,
     References,
+    ON_DELETE,
 )
 from rhubarb.object_set import table as table_decorator
 import dataclasses
 from psycopg import AsyncConnection
+
+
+@dataclasses.dataclass(frozen=True)
+class FrozenReference:
+    table_name: str | None
+    constraint_name: str | None = None
+    on_delete: ON_DELETE | None = None
+
+    @classmethod
+    def from_reference(cls, reference: References) -> Optional[Self]:
+        if reference:
+            return cls(
+                reference.table_name,
+                constraint_name=reference.constraint_name,
+                on_delete=reference.on_delete,
+            )
+
+    def as_reference(self) -> References:
+        return References(
+            self.table_name,
+            constraint_name=self.constraint_name,
+            on_delete=self.on_delete,
+        )
+
+    def compute_constraint_name(self, column_name: str):
+        if self.constraint_name:
+            return self.constraint_name
+        return f"{column_name}_fk"
 
 
 @dataclasses.dataclass
@@ -30,18 +58,18 @@ class MigrationStateColumn:
     python_name: str
     type: SqlType
     default: DEFAULT_SQL_FUNCTION | None = None
-    references: References | None = None
+    references: FrozenReference | None = None
 
     def as_column_field(self) -> ColumnField:
         return column(
             virtual=False,
             column_name=self.name,
             python_name=self.python_name,
-            references=self.references,
+            references=self.references and self.references.as_reference(),
         )
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class MigrationStateTable:
     schema: str
     name: str
@@ -54,7 +82,7 @@ class MigrationStateTable:
     indexes: dict[str, "MigrationIndex"] = dataclasses.field(default_factory=dict)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class MigrationStateDatabase:
     tables: dict[(str, str), MigrationStateTable] = dataclasses.field(
         default_factory=dict
@@ -93,8 +121,9 @@ def state_from_table(m: Type[T]):
             type=column_field.column_type,
             default=default,
             python_name=column_field.python_name,
-            references=column_field.references,
+            references=FrozenReference.from_reference(column_field.references),
         )
+
     pk = tuple(pk_column_names(m))
     schema = m.__schema__
     name = m.__table__
@@ -148,7 +177,7 @@ class MigrationJSONEncoder(json.JSONEncoder):
 
 
 @register_operation
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class MigrationOperation:
     def __as_py__(self) -> str:
         param_str = "\n               ".join(pprint.pformat(self).split("\n"))
@@ -161,7 +190,7 @@ class MigrationOperation:
         raise NotImplementedError
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class AlterOperation:
     def __sql__(self, table: MigrationStateTable) -> MigrationStateDatabase:
         pass
@@ -170,13 +199,13 @@ class AlterOperation:
         pass
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class CreateColumn(AlterOperation):
     name: str
     python_name: str
     type: SqlType
     default: DEFAULT_SQL_FUNCTION | None = None
-    references: References = None
+    references: FrozenReference = None
 
     def __sql__(self, builder: SQLBuilder):
         builder.write(f"ADD COLUMN {self.name} {self.type.raw_sql}")
@@ -185,26 +214,33 @@ class CreateColumn(AlterOperation):
         else:
             builder.write(" NOT NULL")
 
-        if self.default:
-            builder.write(f" DEFAULT {self.default}")
+        if not isinstance(self.default, Unset):
+            default = self.default
+            if isinstance(default, str):
+                builder.write(f" DEFAULT {default}")
+            else:
+                builder.write(f" DEFAULT ")
+                builder.write_value(default)
 
         if self.references:
-            builder.write(f" REFERENCES {self.references.real_table_name}")
+            builder.write(f" REFERENCES {self.references.table_name}")
 
             if self.references.on_delete:
                 builder.write(f" ON DELETE {self.references.on_delete}")
 
     def alter(self, table: MigrationStateTable) -> MigrationStateTable:
-        table.columns[self.name] = MigrationStateColumn(
+        columns = copy.copy(table.columns)
+        columns[self.name] = MigrationStateColumn(
             name=self.name,
             type=self.type,
             default=self.default,
             python_name=self.python_name,
+            references=self.references,
         )
-        return table
+        return dataclasses.replace(table, columns=columns)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class DropColumn:
     name: str
 
@@ -212,12 +248,13 @@ class DropColumn:
         builder.write(f"DROP COLUMN {self.name}")
 
     def alter(self, table):
-        table.columns.pop(self.name)
-        return table
+        columns = copy.copy(table.columns)
+        columns.pop(self.name)
+        return dataclasses.replace(table, columns=columns)
 
 
-@dataclasses.dataclass
-class AlterTypeDefault:
+@dataclasses.dataclass(frozen=True)
+class AlterTypeUsing:
     name: str
     new_type: SqlType
     using: str | None = None
@@ -225,34 +262,43 @@ class AlterTypeDefault:
     def __sql__(self, builder: SQLBuilder):
         builder.write(f"ALTER {self.name} TYPE ")
         self.new_type.__sql__(builder)
-        if self.using:
-            builder.write(f"USING {self.using}")
+        if self.using is None:
+            using = f"{self.name}::TEXT::{self.new_type.raw_sql}"
+        else:
+            using = self.using
+        builder.write(f" USING {using}")
 
     def alter(self, table):
-        col = table.columns.pop(self.name)
-        new_col = copy.deepcopy(col)
-        new_col.type = self.new_type
-        table.columns[self.name] = new_col
-        return table
+        columns = copy.copy(table.columns)
+        col = columns.pop(self.name)
+        new_col = dataclasses.replace(col, type=self.new_type)
+        columns[self.name] = new_col
+        return dataclasses.replace(table, columns=columns)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class SetDefault:
     name: str
     default: DEFAULT_SQL_FUNCTION | None = None
 
     def __sql__(self, builder: SQLBuilder):
-        builder.write(f"ALTER {self.name} SET DEFAULT {self.default}")
+        builder.write(f"ALTER {self.name} SET ")
+        default = self.default
+        if isinstance(default, str):
+            builder.write(f" DEFAULT {default}")
+        else:
+            builder.write(f" DEFAULT ")
+            builder.write_value(default)
 
     def alter(self, table):
-        col = table.columns.pop(self.name)
-        new_col = copy.deepcopy(col)
-        new_col.default = self.default
-        table.columns[self.name] = new_col
-        return table
+        columns = copy.copy(table.columns)
+        col = columns.pop(self.name)
+        new_col = dataclasses.replace(col, default=self.default)
+        columns[self.name] = new_col
+        return dataclasses.replace(table, columns=columns)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class DropDefault:
     name: str
 
@@ -260,14 +306,146 @@ class DropDefault:
         builder.write(f"ALTER {self.name} DROP DEFAULT")
 
     def alter(self, table):
-        col = table.columns.pop(self.name)
-        new_col = copy.deepcopy(col)
-        new_col.default = UNSET
-        table.columns[self.name] = new_col
-        return table
+        columns = copy.copy(table.columns)
+        col = columns.pop(self.name)
+        new_col = dataclasses.replace(col, default=UNSET)
+        columns[self.name] = new_col
+        return dataclasses.replace(table, columns=columns)
 
 
-AlterOperations = DropColumn | CreateColumn | SetDefault | DropDefault
+@dataclasses.dataclass(frozen=True)
+class AddConstraint:
+    constraint_name: str
+    constraint: "MigrationConstraint"
+
+    def __sql__(self, builder: SQLBuilder):
+        builder.write(
+            f"ADD CONSTRAINT {self.constraint_name} {self.constraint.modifier} {self.constraint.check}"
+        )
+
+    def alter(self, table: MigrationStateTable):
+        new_constraints = copy.copy(table.constraints)
+        new_constraints[self.constraint_name] = self.constraint
+        return dataclasses.replace(table, constraints=new_constraints)
+
+
+@dataclasses.dataclass(frozen=True)
+class DropConstraint:
+    constraint_name: str
+
+    def __sql__(self, builder: SQLBuilder):
+        builder.write(f"DROP CONSTRAINT {self.constraint_name}")
+
+    def alter(self, table: MigrationStateTable):
+        new_constraints = copy.copy(table.constraints)
+        new_constraints.pop(self.constraint_name)
+        return dataclasses.replace(table, constraints=new_constraints)
+
+
+@dataclasses.dataclass(frozen=True)
+class AddIndex:
+    table_name: (str, str)
+    index_name: str
+    index: "MigrationIndex"
+
+    async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
+        builder = SQLBuilder(dml_mode=True)
+
+        unique = ""
+        if self.index.unique:
+            unique = "UNIQUE "
+
+        concurrently = ""
+        if self.index.concurrently:
+            concurrently = "CONCURRENTLY "
+
+        builder.write(
+            f"CREATE {unique}INDEX {concurrently}{self.index_name} ON {self.table_name[1]} {self.index.on}"
+        )
+        await conn.execute(builder.q)
+
+    def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
+        tables = copy.copy(state.tables)
+        table = state.tables[self.table_name]
+        new_indexes = copy.copy(table.indexes)
+        new_indexes[self.index_name] = self.index
+        new_table = dataclasses.replace(table, indexes=new_indexes)
+        tables[self.table_name] = new_table
+        return dataclasses.replace(state, tables=tables)
+
+
+@dataclasses.dataclass(frozen=True)
+class RenameIndex:
+    old_index_name: str
+    index_name: str
+    table_name: (str, str)
+
+    async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
+        builder = SQLBuilder()
+        builder.write(f"ALTER INDEX {self.old_index_name} RENAME TO {self.index_name}")
+        await conn.execute(builder.q)
+
+    def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
+        tables = copy.copy(state.tables)
+        table = state.tables[self.table_name]
+        new_indexes = copy.copy(table.indexes)
+        new_indexes[self.index_name] = new_indexes.pop(self.old_index_name)
+        new_table = dataclasses.replace(table, indexes=new_indexes)
+        tables[self.table_name] = new_table
+        return dataclasses.replace(state, tables=tables)
+
+
+@dataclasses.dataclass(frozen=True)
+class DropIndex:
+    table_name: (str, str)
+    index_name: str
+
+    async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
+        builder = SQLBuilder()
+        builder.write(f"DROP INDEX {self.index_name}")
+        await conn.execute(builder.q)
+
+    def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
+        tables = copy.copy(state.tables)
+        table = state.tables[self.table_name]
+        new_indexes = copy.copy(table.indexes)
+        new_indexes.pop(self.index_name)
+        tables[self.table_name] = dataclasses.replace(table, indexes=new_indexes)
+        return dataclasses.replace(state, tables=tables)
+
+
+@dataclasses.dataclass(frozen=True)
+class AddReferencesConstraint:
+    name: str
+    constraint_name: str
+    references: FrozenReference
+
+    def __sql__(self, builder: SQLBuilder):
+        builder.write(
+            f"ADD CONSTRAINT {self.constraint_name} FOREIGN KEY ({self.name}) REFERENCES {self.references.table_name}"
+        )
+
+        if self.references.on_delete:
+            builder.write(f" ON DELETE {self.references.on_delete}")
+
+    def alter(self, table: MigrationStateTable):
+        columns = copy.copy(table.columns)
+        col = columns.pop(self.name)
+        new_col = dataclasses.replace(col, references=self.references)
+        columns[self.name] = new_col
+        return dataclasses.replace(table, columns=columns)
+
+
+AlterOperations = (
+    DropColumn
+    | CreateColumn
+    | SetDefault
+    | DropDefault
+    | AddReferencesConstraint
+    | DropConstraint
+    | AddConstraint
+    | AlterTypeUsing
+)
 
 
 @dataclasses.dataclass(kw_only=True)
@@ -331,7 +509,7 @@ class MigrationConstraint:
 
 
 @register_operation
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class CreateTable(MigrationOperation):
     schema: str
     name: str
@@ -344,7 +522,7 @@ class CreateTable(MigrationOperation):
     indexes: dict[str, MigrationIndex] = dataclasses.field(default_factory=dict)
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
-        builder = SQLBuilder()
+        builder = SQLBuilder(dml_mode=True)
         builder.write(f"CREATE TABLE {self.name} (")
         wrote_val = False
         for column in self.columns:
@@ -356,11 +534,21 @@ class CreateTable(MigrationOperation):
                 builder.write(" NULL")
             else:
                 builder.write(" NOT NULL")
-            if column.default and not isinstance(column.default, Unset):
-                builder.write(f" DEFAULT {column.default}")
+            if not isinstance(column.default, Unset) and not isinstance(
+                column.default, Unset
+            ):
+                default = column.default
+                if isinstance(default, str):
+                    builder.write(f" DEFAULT {default}")
+                else:
+                    builder.write(f" DEFAULT ")
+                    builder.write_value(default)
 
             if column.references:
-                builder.write(f" REFERENCES {column.references.real_table_name}")
+                constraint_name = column.references.compute_constraint_name(column.name)
+                builder.write(
+                    f" CONSTRAINT {constraint_name} REFERENCES {column.references.table_name}"
+                )
 
                 if column.references.on_delete:
                     builder.write(f" ON DELETE {column.references.on_delete}")
@@ -401,26 +589,29 @@ class CreateTable(MigrationOperation):
             constraints=self.constraints,
             indexes=self.indexes,
         )
-        for col in self.columns:
-            new_table = col.alter(new_table)
 
-        state.tables[(self.schema, self.name)] = new_table
-        return state
+        tables = copy.copy(state.tables)
+        tables[(self.schema, self.name)] = new_table
+        return dataclasses.replace(state, tables=state.tables)
 
 
 @register_operation
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class DropTable(MigrationOperation):
     schema: str
     name: str
 
     def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
-        state.tables.pop((self.schema, self.name))
-        return state
+        tables = copy.copy(state.tables)
+        tables.pop((self.schema, self.name))
+        return dataclasses.replace(state, tables=state.tables)
+
+    async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
+        await conn.execute(f"DROP TABLE {self.name}")
 
 
 @register_operation
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class RenameTable(MigrationOperation):
     schema: str
     old_name: str
@@ -433,16 +624,17 @@ class RenameTable(MigrationOperation):
         await conn.execute(builder.q)
 
     def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
-        old_table = state.tables.pop((self.schema, self.old_name))
-        new_table = copy.deepcopy(old_table)
-        new_table.name = self.new_name
-        new_table.class_name = self.new_class_name
-        state.tables[(self.schema, new_table.name)] = new_table
-        return state
+        tables = copy.copy(state.tables)
+        old_table = tables.pop((self.schema, self.old_name))
+        new_table = dataclasses.replace(
+            old_table, name=self.new_name, class_name=self.new_class_name
+        )
+        tables[(self.schema, new_table.name)] = new_table
+        return dataclasses.replace(state, tables=tables)
 
 
 @register_operation
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class RenameColumn(MigrationOperation):
     schema: str
     name: str
@@ -458,18 +650,22 @@ class RenameColumn(MigrationOperation):
         await conn.execute(builder.q)
 
     def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
-        old_table = state.tables.pop((self.schema, self.old_name))
-        new_table = copy.deepcopy(old_table)
-        col = new_table.columns.pop(self.old_column_name)
-        col.name = self.new_column_name
-        col.python_name = self.new_python_name
-        new_table.columns[self.new_column_name] = col
-        state.tables[(self.schema, new_table.name)] = new_table
-        return state
+        tables = copy.copy(state.tables)
+        old_table = tables.pop((self.schema, self.old_name))
+        columns = copy.deepcopy(old_table.columns)
+        col = columns.pop(self.old_column_name)
+
+        new_col = dataclasses.replace(
+            col, name=self.new_column_name, python_name=self.new_python_name
+        )
+        columns[self.new_column_name] = new_col
+        new_table = dataclasses.replace(old_table, columns=columns)
+        tables[(self.schema, new_table.name)] = new_table
+        return dataclasses.replace(state, tables=tables)
 
 
 @register_operation
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class AlterTable(MigrationOperation):
     schema: str
     name: str
@@ -477,24 +673,28 @@ class AlterTable(MigrationOperation):
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
         builder = SQLBuilder()
-        builder.write(f'ALTER TABLE "{self.name}"')
+        builder.write(f'ALTER TABLE "{self.name}" ')
+        wrote_val = False
         for op in self.alter_operations:
+            if wrote_val:
+                builder.write(", ")
+            wrote_val = True
             op.__sql__(builder)
         await conn.execute(builder.q)
 
     def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
-        old_table = state.tables.pop((self.schema, self.name))
-        new_table = copy.deepcopy(old_table)
+        new_tables = copy.copy(state.tables)
+        old_table = new_tables.pop((self.schema, self.name))
 
         for op in self.alter_operations:
-            new_table = op.alter(new_table)
+            old_table = op.alter(old_table)
 
-        state.tables[(self.schema, new_table.name)] = new_table
-        return state
+        new_tables[(self.schema, old_table.name)] = old_table
+        return dataclasses.replace(state, tables=new_tables)
 
 
 @register_operation
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class SetMeta(MigrationOperation):
     new_meta_kvs: dict[str, Any]
 
@@ -504,8 +704,7 @@ class SetMeta(MigrationOperation):
     def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
         new_meta = copy.copy(state.meta)
         new_meta.update(self.new_meta_kvs)
-        state.meta = new_meta
-        return state
+        return dataclasses.replace(state, meta=new_meta)
 
 
 @dataclasses.dataclass
@@ -542,7 +741,7 @@ class MigrationInfo:
 
 
 @register_operation
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class RunPython(MigrationOperation):
     python_function: Callable[[MigrationInfo], Optional[Awaitable[None]]]
 
@@ -556,8 +755,9 @@ class RunPython(MigrationOperation):
         return state
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Migration:
     id: str
     depends_on: list[str]
     operations: list[MigrationOperation]
+    atomic: bool = True
