@@ -25,7 +25,7 @@ import datetime
 import uuid
 from typing import Optional
 from rhubarb import Schema, ObjectSet, ModelSelector, BaseModel, RhubarbExtension, column, table, type, \
-    field, get_conn, query, references, relation, virtual_column
+    field, get_conn, query, references, relation, virtual_column, Binary
 from strawberry.scalars import JSON
 from strawberry.types import Info
 
@@ -50,7 +50,7 @@ class Person(BaseModel):
     example_float_col: float = column()
     example_int_col: int = column()
     example_decimal_col: decimal.Decimal = column()
-    example_bytes_col: bytes = column()
+    example_bytes_col: Binary = column()
     example_jsonb_col: JSON = column()
     
     other_table_reference_id: int = references(TableWithoutSuperClass.__table__)
@@ -72,7 +72,6 @@ class Query:
     
 schema = Schema(
     query=Query,
-    mutation=Mutation,
     extensions=[
         RhubarbExtension
     ]
@@ -126,6 +125,7 @@ Simply create a new schema using standard `type` and `field` exposing only the f
 import rhubarb
 from rhubarb import Schema, ObjectSet, RhubarbExtension, get_conn, query
 from strawberry.types import Info
+from strawberry.scalars import Base64
 
 
 @rhubarb.type
@@ -137,6 +137,8 @@ class TableWithoutSuperClass:
 @rhubarb.type
 class PublicPerson:
     name: str
+    # If you are exposing public APIs, better to serialize the Binary fields as Base64
+    example_bytes_col: Base64
 
     @rhubarb.field
     def other_table(self) -> TableWithoutSuperClass:
@@ -149,8 +151,9 @@ class PublicPerson:
     
 @rhubarb.type
 class PublicQuery:
+    # Do the query on the Private type and return an ObjectSet, but make the GQL type a Public type instead.
     @rhubarb.field(graphql_type=list[PublicPerson])
-    def all_people(self, info: Info) -> ObjectSet[Person, Person]:
+    def public_people(self, info: Info) -> ObjectSet[Person, Person]:
         return query(Person, get_conn(info), info).where(lambda x: x.example_int_col > 10)
 
 
