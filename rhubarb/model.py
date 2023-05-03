@@ -2,7 +2,7 @@ import dataclasses
 import datetime
 import uuid
 
-from rhubarb.core import SupportsSqlModel
+from rhubarb.core import SupportsSqlModel, Serial
 from rhubarb.object_set import column
 
 
@@ -21,4 +21,10 @@ class BaseUpdatedAtModel(BaseModel):
 
 @dataclasses.dataclass
 class BaseIntModel(BaseModel):
-    id: uuid.UUID = column(sql_default="uuid_generate_v4()")
+    id: Serial = column()
+
+
+@dataclasses.dataclass
+class BaseIntUpdatedAtModel(BaseIntModel):
+    created_at: datetime.datetime = column(insert_default="now()")
+    updated_at: datetime.datetime = column(update_default="now()")

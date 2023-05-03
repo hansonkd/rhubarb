@@ -8,6 +8,7 @@ from typing import TypeVar, Protocol, ClassVar, Literal, Union, NewType
 
 from psycopg import AsyncConnection
 from strawberry import scalar
+from strawberry.scalars import JSON, Base16, Base32, Base64
 from strawberry.types import Info
 from strawberry.types.types import TypeDefinition
 from strawberry import scalars
@@ -24,6 +25,14 @@ Binary = scalar(
     serialize=lambda v: v,
     parse_value=lambda v: v,
 )
+
+
+Serial = scalar(
+    NewType("Serial", int),
+    serialize=lambda v: v,
+    parse_value=lambda v: v,
+)
+
 
 def new_ref_id() -> str:
     return str(time.monotonic_ns())[-5:]
@@ -54,7 +63,7 @@ class SupportsSqlModel(Protocol):
     __pk__: str | tuple[str]
 
 
-SQLValue = Union[
+ScalarSQLValue = Union[
     None,
     str,
     bytes,
@@ -63,9 +72,18 @@ SQLValue = Union[
     bool,
     int,
     float,
+    dict,
+    list,
     decimal.Decimal,
     SupportsSqlModel,
+    JSON,
+    Binary,
+    Base16,
+    Base32,
+    Base64,
 ]
+
+SQLValue = Union[ScalarSQLValue, list[ScalarSQLValue], dict[str, ScalarSQLValue]]
 
 T = TypeVar("T", bound=SupportsSqlModel)
 J = TypeVar("J", bound=SupportsSqlModel)

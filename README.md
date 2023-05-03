@@ -6,7 +6,7 @@ Rhubarb is an ORM written from scratch focused on optimizing traversing GQL data
 
 *Strawberry-Rhubarb Pie... Tasty!*
 
-## Rhubarb at a glance
+# Rhubarb at a glance
 
 * Asyncio Native
 * Built on GraphQL for optimization layer on nested queries
@@ -15,8 +15,9 @@ Rhubarb is an ORM written from scratch focused on optimizing traversing GQL data
 * Intuitively Solve N+1 without even realizing it
 * Simplify Aggregations / Joins / Subqueries
 * Heavily inspired by Django and built with the philosophy of take the best parts.
-* Public / Private Schema dichotomy
-* 
+* Native Public / Private Schema dichotomy
+* Pass User and Extra info to use in queries through Strawberry Info's context.
+
 Rhubarb declares Postgres tables with Strawberry dataclasses.
 
 ```python
@@ -78,7 +79,7 @@ schema = Schema(
 )
 ```
 
-### Using GQL as an ORM client
+## Using GQL as an ORM client
 
 Now we can use our schema to make queries and Rhubarb will try to optimize them for you.
 
@@ -183,7 +184,7 @@ async with connection() as conn:
     recent_person = await query(Person, conn).order_by(lambda x: Desc(x.example_date_col)).one()
 ```
 
-### Virtual Columns
+## Virtual Columns
 
 Rhubarb tables are different from standard Python objects. methods decorated with `virtual_column` and `field` are not executed in Python. These methods are pushed down and transformed into SQL to be executed on the Postgres Server.
 
@@ -217,11 +218,11 @@ class Person(BaseModel):
         )
 ```
 
-### Relations
+## Relations
 
 Rhubarb will follow child selections and inline as many queries for relation data as possible. This means that most relations that return 1 or 0 objects can be inlined in the same Query as their parent object.
 
-#### Relationships with Many Objects
+### Relationships with Many Objects
 
 If you have a parent with many children, you can return a list of children by specifying that you want to return a list using `graphql_type` like so `@relation(graphql_type=list[Pet])`.
 
@@ -252,7 +253,7 @@ class Person(BaseModel):
         return self.id == pet.owner_id
 ```
 
-#### Aggregations
+## Aggregations
 
 Aggregations are done by making a virtual table by setting registry to None and then specifying a `__group_by__`.
 
@@ -544,3 +545,34 @@ def migrate():
         ]
     )
 ```
+
+# Base Models
+
+There are some convenience superclasses that will add primary keys and utility fields to your Model automatically.
+
+* BaseModel - UUID Primary Key
+* BaseUpdateAtModel - UUID Primary Key, created_at, updated_at fields.
+* BaseIntModel - SERIAL Primary Key
+* BaseIntUpdateAtModel - SERIAL Primary Key, created_at, updated_at fields.
+
+# Built-in Types
+
+
+* `dict` -> `JSONB`
+* `list` -> `JSONB`
+* `strawberry.scalars.JSON` -> `JSONB`
+* `strawberry.scalars.Base64` -> `BYTEA`
+* `strawberry.scalars.Base32` -> `BYTEA`
+* `strawberry.scalars.Base16` -> `BYTEA`
+* `rhubarb.core.Binary` -> `BYTEA` (returns raw `bytes` objects)
+* `rhubarb.core.Serial` -> `SERIAL`
+* `typing.Optional` -> make columns accept NULL
+* `bool` -> `BOOLEAN`
+* `int` -> `BIGINT`
+* `float` -> `FLOAT`
+* `str` -> `TEXT`
+* `bytes` -> `BYTEA`
+* `datetime.datetime` -> `TIMESTAMPTZ`
+* `datetime.date` -> `DATE`
+* `uuid.UUID` -> `UUID`
+* `None` -> `NULL` (cannot use as column, use Optional instead.)

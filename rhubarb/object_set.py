@@ -47,12 +47,14 @@ from rhubarb.core import (
     new_ref_id,
     SQLValue,
     default_function_to_python,
-    Unset, Binary,
+    Unset,
+    Binary,
+    Serial,
 )
 from rhubarb.errors import RhubarbException
 from strawberry.field import StrawberryField
 from strawberry.types.types import TypeDefinition
-from strawberry.scalars import JSON
+from strawberry.scalars import JSON, Base64, Base16, Base32
 
 ON_DELETE = Literal["CASCADE", "NO ACTION", "SET NULL", "RESTRICT"]
 SelectedFields = list[SelectedField | FragmentSpread | InlineFragment]
@@ -89,6 +91,8 @@ class SqlType:
                 return uuid.UUID
             case "JSONB":
                 return JSON
+            case "SERIAL":
+                return Serial
             case other:
                 raise RhubarbException(f"Cannot find python type for {other}")
 
@@ -102,8 +106,10 @@ class SqlType:
             return t.__sql_type__()
         elif t == JSON:
             return cls(raw_sql="JSONB")
-        elif t == Binary:
+        elif t in (Binary, Base64, Base32, Base16):
             return cls(raw_sql="BYTEA")
+        elif t == Serial:
+            return cls(raw_sql="SERIAL")
         elif isinstance(t, StrawberryOptional):
             inner_type = cls.from_python(t.of_type)
             inner_type.optional = True
@@ -203,6 +209,7 @@ class SQLBuilder:
 
 class UUIDEncoder(json.JSONEncoder):
     """A JSON encoder which can dump UUID."""
+
     def default(self, obj):
         if isinstance(obj, uuid.UUID):
             return str(obj)

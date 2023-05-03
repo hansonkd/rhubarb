@@ -18,7 +18,7 @@ from rhubarb.crud import delete, save, insert_objs, update, query
 from rhubarb.extension import RhubarbExtension
 from rhubarb.fixtures import *  # noqa
 from rhubarb.migrations.utils import reset_db_and_fast_forward
-from rhubarb.model import BaseUpdatedAtModel
+from rhubarb.model import BaseUpdatedAtModel, BaseIntModel
 from rhubarb.functions import (
     avg_agg,
     concat,
@@ -62,6 +62,7 @@ def public_schema():
         config=StrawberryConfig(auto_camel_case=False),
     )
 
+
 @pytest_asyncio.fixture
 async def run_migrations(postgres_connection):
     await reset_db_and_fast_forward(postgres_connection, testing_registry)
@@ -100,7 +101,6 @@ async def basic_data(postgres_connection, run_migrations):
                 internal_bin_info=bytes(range(256)),
                 meta_info={"wow": 1, "other": [123]},
                 public=True,
-
             ),
             Book(
                 title="How to GQL",
@@ -217,7 +217,7 @@ class Book(BaseUpdatedAtModel):
 
 
 @table(registry=testing_registry)
-class RatingModel(BaseUpdatedAtModel):
+class RatingModel(BaseIntModel):
     rating: int = column()
     book_id: uuid.UUID = column(
         references=References(Book.__table__, on_delete="CASCADE")
@@ -377,7 +377,6 @@ class PublicAuthor:
 class PublicBook:
     title: str
 
-
     @strawberry.field
     def author(self) -> PublicAuthor:
         return self.author()
@@ -388,4 +387,3 @@ class PublicQuery:
     @strawberry.field(graphql_type=list[PublicBook])
     def all_public_books(self, info: Info) -> ObjectSet[Book, ModelSelector[Book]]:
         return query(Book, get_conn(info), info)
-
