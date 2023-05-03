@@ -6,6 +6,7 @@ import dataclasses
 import datetime
 import functools
 import inspect
+import json
 import uuid
 from collections import defaultdict
 from typing import (
@@ -29,6 +30,7 @@ from typing import (
 import strawberry
 from psycopg import Connection, AsyncConnection
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 from strawberry.annotation import StrawberryAnnotation
 from strawberry.type import StrawberryOptional, StrawberryType, StrawberryList
 from strawberry.types import Info
@@ -45,7 +47,7 @@ from rhubarb.core import (
     new_ref_id,
     SQLValue,
     default_function_to_python,
-    Unset,
+    Unset, Binary,
 )
 from rhubarb.errors import RhubarbException
 from strawberry.field import StrawberryField
@@ -78,7 +80,7 @@ class SqlType:
             case "BOOLEAN":
                 return bool
             case "BYTEA":
-                return bytes
+                return Binary
             case "TIMESTAMPTZ":
                 return datetime.datetime
             case "DATE":
@@ -100,6 +102,8 @@ class SqlType:
             return t.__sql_type__()
         elif t == JSON:
             return cls(raw_sql="JSONB")
+        elif t == Binary:
+            return cls(raw_sql="BYTEA")
         elif isinstance(t, StrawberryOptional):
             inner_type = cls.from_python(t.of_type)
             inner_type.optional = True
@@ -120,6 +124,8 @@ class SqlType:
             return cls(raw_sql="DATE")
         elif issubclass(t, uuid.UUID):
             return cls(raw_sql="UUID")
+        elif issubclass(t, (dict, list)):
+            return cls(raw_sql="JSON")
         raise RhubarbException(
             f"InvalidSQL Type: {t} cannot be made into a valid SQLType"
         )
@@ -190,7 +196,20 @@ class SQLBuilder:
                     self.write(f"'{v}'::{sql_type.raw_sql}")
                 else:
                     self.write(f"%s::{sql_type.raw_sql}")
+                    if isinstance(v, (dict, list)):
+                        v = Jsonb(v, dumps=uuid_dumps)
                     self.vars.append(v)
+
+
+class UUIDEncoder(json.JSONEncoder):
+    """A JSON encoder which can dump UUID."""
+    def default(self, obj):
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+        return json.JSONEncoder.default(self, obj)
+
+
+uuid_dumps = functools.partial(json.dumps, cls=UUIDEncoder)
 
 
 def call_with_maybe_info(f, obj, info):

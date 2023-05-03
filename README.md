@@ -1,6 +1,6 @@
-# Rhubarb - The Funky Sweet ORM built on Strawberry GraphQL
+# Rhubarb - The Funky Sweet Python ORM built on Strawberry GraphQL
 
-Rhubarb is an ORM written from scratch focused on optimizing traversing data generated through postgres.
+Rhubarb is an ORM written from scratch focused on optimizing traversing GQL data generated through postgres.
 
 <img width="653" alt="Screenshot 2023-05-03 at 2 32 48 AM" src="https://user-images.githubusercontent.com/496914/235881083-f47d21ff-2462-46f9-acc2-e900316fe05f.png">
 
@@ -14,7 +14,9 @@ Rhubarb is an ORM written from scratch focused on optimizing traversing data gen
 * Migrations - Automatically generate Schema changes as your data model updates.
 * Intuitively Solve N+1 without even realizing it
 * Simplify Aggregations / Joins / Subqueries
-
+* Heavily inspired by Django and built with the philosophy of take the best parts.
+* Public / Private Schema dichotomy
+* 
 Rhubarb declares Postgres tables with Strawberry dataclasses.
 
 ```python
@@ -94,7 +96,7 @@ from rhubarb.connection import connection
 
 
 async with connection() as conn:
-    await schema.execute(
+    res = await schema.execute(
         """
         query {
             all_people {
@@ -113,6 +115,52 @@ async with connection() as conn:
 ```
 
 You can either use Rhubarb stand alone or integrate it with FastAPI and Strawberry for a web service.
+
+### Public Schemas
+
+While you can expose your Schema on FastAPI directly, and maybe that is beneficial for internal use, but for the public users, you do not want all your DB Columns exposed.
+
+Simply create a new schema using standard `type` and `field` exposing only the fields you want from the underlying object exposed.
+
+```python
+import rhubarb
+from rhubarb import Schema, ObjectSet, RhubarbExtension, get_conn, query
+from strawberry.types import Info
+
+
+@rhubarb.type
+class TableWithoutSuperClass:
+    info: str
+
+
+
+@rhubarb.type
+class PublicPerson:
+    name: str
+
+    @rhubarb.field
+    def other_table(self) -> TableWithoutSuperClass:
+        return self.other_table()
+    
+    @rhubarb.field
+    def int_is_big(self) -> bool:
+        return self.int_is_big()
+
+    
+@rhubarb.type
+class PublicQuery:
+    @rhubarb.field(graphql_type=list[PublicPerson])
+    def all_people(self, info: Info) -> ObjectSet[Person, Person]:
+        return query(Person, get_conn(info), info).where(lambda x: x.example_int_col > 10)
+
+
+private_schema = Schema(
+    query=PublicQuery,
+    extensions=[
+        RhubarbExtension
+    ]
+)
+```
 
 ### Without GQL
 
@@ -382,7 +430,7 @@ python -m rhubarb.migrations.cmd.reset
 
 You can manage migrations with Registries. A registry is a group of models that can include other registries. This allows you include apps with collections of models in your app.
 
-By default there is a DEFAULT_REGISTRY that all models are registered to.
+By default there is a DEFAULT_REGISTRY that all models will be associated with unless otherwise specified.
 
 ```python
 from rhubarb import DEFAULT_REGISTRY, Registry, BaseModel, table
@@ -489,7 +537,7 @@ def migrate():
         id="migration_20230426-034718",
         depends_on=[...],
         operations=[
-            RunPython(mig_fn)
+            migrations.RunPython(mig_fn)
         ]
     )
 ```

@@ -11,7 +11,7 @@ async def test_books(schema, postgres_connection, basic_data):
 
     with track_queries() as tracker:
         res = await schema.execute(
-            "query { all_books { id, title } }",
+            "query { all_books { id, title, comments, author_id, published_on, meta_info, internal_bin_info, public, created_at, updated_at } }",
             context_value={"conn": conn},
         )
         assert res.errors is None
@@ -310,3 +310,32 @@ async def test_case(schema, postgres_connection, basic_data):
         assert len(tracker.queries) == 1
         for rating in res.data["all_ratings"]:
             assert rating["case_computation"]
+
+
+@pytest.mark.asyncio
+async def test_public_schema(public_schema, postgres_connection, basic_data):
+    conn = postgres_connection
+
+    with track_queries() as tracker:
+        res = await public_schema.execute(
+            "query { all_public_books { title, author { name } } }",
+            context_value={"conn": conn},
+        )
+        assert res.errors is None
+        assert len(tracker.queries) == 1
+        for rating in res.data["all_public_books"]:
+            assert rating["title"]
+            assert rating["author"]
+            assert rating["author"]["name"]
+
+
+@pytest.mark.asyncio
+async def test_public_schema_error(public_schema, postgres_connection, basic_data):
+    conn = postgres_connection
+
+    with track_queries() as tracker:
+        res = await public_schema.execute(
+            "query { all_public_books { title, author { id } } }",
+            context_value={"conn": conn},
+        )
+        assert res.errors is not None

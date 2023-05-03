@@ -13,7 +13,7 @@ import strawberry
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 
-from rhubarb.core import get_conn
+from rhubarb.core import get_conn, Binary
 from rhubarb.crud import delete, save, insert_objs, update, query
 from rhubarb.extension import RhubarbExtension
 from rhubarb.fixtures import *  # noqa
@@ -41,17 +41,26 @@ from rhubarb.object_set import (
     References,
     references,
 )
+from rhubarb.schema import ErrorRaisingSchema
 
 
 @pytest.fixture
 def schema():
-    return Schema(
+    return ErrorRaisingSchema(
         query=Query,
         mutation=Mutation,
         extensions=[RhubarbExtension],
         config=StrawberryConfig(auto_camel_case=False),
     )
 
+
+@pytest.fixture
+def public_schema():
+    return ErrorRaisingSchema(
+        query=PublicQuery,
+        extensions=[RhubarbExtension],
+        config=StrawberryConfig(auto_camel_case=False),
+    )
 
 @pytest_asyncio.fixture
 async def run_migrations(postgres_connection):
@@ -88,6 +97,10 @@ async def basic_data(postgres_connection, run_migrations):
                 title="Python for Dummies",
                 author_id=authors[0].id,
                 published_on=datetime.date(2023, 9, 3),
+                internal_bin_info=bytes(range(256)),
+                meta_info={"wow": 1, "other": [123]},
+                public=True,
+
             ),
             Book(
                 title="How to GQL",
@@ -163,6 +176,7 @@ class Book(BaseUpdatedAtModel):
     author_id: uuid.UUID = references(Author.__table__, on_delete="RESTRICT")
     published_on: datetime.date = column()
     meta_info: Optional[JSON] = column(sql_default=None)
+    internal_bin_info: Optional[Binary] = column(sql_default=None)
     public: bool = column(sql_default=False)
 
     @relation
@@ -354,15 +368,24 @@ class Mutation:
         ).execute(one=True)
 
 
-class Schema(strawberry.Schema):
-    def process_errors(
-        self,
-        errors,
-        execution_context=None,
-    ) -> None:
-        super().process_errors(errors, execution_context)
+@strawberry.type
+class PublicAuthor:
+    name: str
 
-        for error in errors:
-            err = getattr(error, "original_error")
-            if err:
-                raise err
+
+@strawberry.type
+class PublicBook:
+    title: str
+
+
+    @strawberry.field
+    def author(self) -> PublicAuthor:
+        return self.author()
+
+
+@strawberry.type
+class PublicQuery:
+    @strawberry.field(graphql_type=list[PublicBook])
+    def all_public_books(self, info: Info) -> ObjectSet[Book, ModelSelector[Book]]:
+        return query(Book, get_conn(info), info)
+

@@ -1,14 +1,16 @@
+import base64
 import datetime
 import decimal
 import inspect
 import time
 import uuid
-from typing import TypeVar, Protocol, ClassVar, Literal, Union
+from typing import TypeVar, Protocol, ClassVar, Literal, Union, NewType
 
 from psycopg import AsyncConnection
+from strawberry import scalar
 from strawberry.types import Info
 from strawberry.types.types import TypeDefinition
-
+from strawberry import scalars
 from rhubarb.errors import RhubarbException
 
 Elem = TypeVar("Elem")
@@ -16,6 +18,12 @@ Elem = TypeVar("Elem")
 
 DEFAULT_SQL_FUNCTION = Literal["uuid_generate_v4()", "now()", "null", True, False]
 
+
+Binary = scalar(
+    NewType("Binary", bytes),
+    serialize=lambda v: v,
+    parse_value=lambda v: v,
+)
 
 def new_ref_id() -> str:
     return str(time.monotonic_ns())[-5:]
