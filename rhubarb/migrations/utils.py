@@ -123,7 +123,7 @@ def iter_find_diffs(
         for column_name in kept_column_names:
             old_column_value = old_table.columns[column_name]
             new_column_value = new_table.columns[column_name]
-            if old_column_value.type.raw_sql != new_column_value.type.raw_sql:
+            if old_column_value.type != new_column_value.type:
                 altered_statements.append(
                     AlterTypeUsing(name=column_name, new_type=new_column_value.type)
                 )
@@ -159,7 +159,11 @@ def iter_find_diffs(
             if old_column_value.default != new_column_value.default:
                 if not isinstance(new_column_value.default, Unset):
                     altered_statements.append(
-                        SetDefault(name=column_name, default=new_column_value.default)
+                        SetDefault(
+                            name=column_name,
+                            default=new_column_value.default,
+                            type=new_column_value.type,
+                        )
                     )
                 else:
                     altered_statements.append(DropDefault(name=column_name))

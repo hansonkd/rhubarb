@@ -1,15 +1,17 @@
 import dataclasses
 import logging
 from collections import deque
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import contextmanager
 from typing import Optional, Protocol, ContextManager
 
-from psycopg import AsyncConnection, AsyncCursor
+import phonenumbers
+from psycopg import AsyncConnection, AsyncCursor, postgres
 from psycopg.abc import Query, Params
+from psycopg.pq import Format
 from psycopg.rows import Row
 import time
 
-from rhubarb.config import config
+from psycopg.types.string import StrBinaryDumper
 
 
 class QueryListener(Protocol):
@@ -67,8 +69,8 @@ def track_queries() -> ContextManager[QueryTracker]:
 class AsyncConnectionWithStats(AsyncConnection):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._executed_queries = deque(maxlen=500)
         self.cursor_factory = AsyncCursorWithStats
+        self.adapters.register_dumper(phonenumbers.PhoneNumber, PhoneNumberDumper)
 
 
 class AsyncCursorWithStats(AsyncCursor):
@@ -87,9 +89,9 @@ class AsyncCursorWithStats(AsyncCursor):
         return result
 
 
-@asynccontextmanager
-async def connection(**kwds):
-    for k, v in dataclasses.asdict(config().postgres).items():
-        kwds.setdefault(k, v)
-    async with await AsyncConnectionWithStats.connect(**kwds) as conn:
-        yield conn
+class PhoneNumberDumper(StrBinaryDumper):
+    format = Format.TEXT
+    oid = postgres.types["text"].oid
+
+    def dump(self, obj):
+        return super().dump(str(obj))

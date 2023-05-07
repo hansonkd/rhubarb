@@ -1,6 +1,7 @@
 import datetime
 import random
 
+import phonenumbers
 import pytest_asyncio
 
 from strawberry.scalars import JSON
@@ -13,8 +14,8 @@ import strawberry
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 
-from rhubarb.core import get_conn, Binary
-from rhubarb.crud import delete, save, insert_objs, update, query
+from rhubarb.core import get_conn, Binary, PhoneNumber, Email
+from rhubarb.crud import delete, save, insert_objs, update, query, by_pk
 from rhubarb.extension import RhubarbExtension
 from rhubarb.fixtures import *  # noqa
 from rhubarb.migrations.utils import reset_db_and_fast_forward
@@ -49,7 +50,6 @@ def schema():
     return ErrorRaisingSchema(
         query=Query,
         mutation=Mutation,
-        extensions=[RhubarbExtension],
         config=StrawberryConfig(auto_camel_case=False),
     )
 
@@ -100,6 +100,8 @@ async def basic_data(postgres_connection, run_migrations):
                 published_on=datetime.date(2023, 9, 3),
                 internal_bin_info=bytes(range(256)),
                 meta_info={"wow": 1, "other": [123]},
+                contact_phone=phonenumbers.parse("+18884156789"),
+                contact_email="email@example.com",
                 public=True,
             ),
             Book(
@@ -176,7 +178,10 @@ class Book(BaseUpdatedAtModel):
     author_id: uuid.UUID = references(Author.__table__, on_delete="RESTRICT")
     published_on: datetime.date = column()
     meta_info: Optional[JSON] = column(sql_default=None)
-    internal_bin_info: Optional[Binary] = column(sql_default=None)
+    favorite_pages: list[int] = column(sql_default="'{}'")
+    internal_bin_info: Optional[bytes] = column(sql_default=None)
+    contact_phone: Optional[PhoneNumber] = column(sql_default=False)
+    contact_email: Optional[Email] = column(sql_default=None)
     public: bool = column(sql_default=False)
 
     @relation
@@ -356,16 +361,16 @@ class Mutation:
             .one()
         )
         obj.title = new_title
-        return await save(obj, get_conn(info), info=info)
+        return save(obj, get_conn(info), info=info)
 
     @strawberry.mutation
-    async def delete_book(self, info: Info, book_id: uuid.UUID) -> Book:
-        def where(root):
-            return root.id == book_id
-
-        return await delete(
-            Book, get_conn(info), info=info, where=where, returning=True
-        ).execute(one=True)
+    async def delete_book(self, info: Info, book_id: uuid.UUID) -> uuid.UUID:
+        return (
+            await by_pk(Book, book_id, get_conn(info), info=info)
+            .select(lambda x: x.id)
+            .delete()
+            .execute()
+        )
 
 
 @strawberry.type

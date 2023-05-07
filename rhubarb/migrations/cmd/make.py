@@ -13,6 +13,7 @@ from rhubarb.migrations.utils import (
 
 try:
     from black import format_file_contents, FileMode
+
     use_black = True
 except ImportError:
     use_black = False

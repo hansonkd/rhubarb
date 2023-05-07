@@ -1,10 +1,27 @@
+import copy
+
 import strawberry
+from strawberry.scalars import JSON
+
+from rhubarb import RhubarbExtension, Binary
 
 
-Schema = strawberry.Schema
+class Schema(strawberry.Schema):
+    def __init__(self, *args, **kwargs):
+        extensions = copy.copy(kwargs.pop("extensions", []))
+        if RhubarbExtension not in extensions:
+            extensions.append(RhubarbExtension)
+        kwargs["extensions"] = extensions
+
+        scalar_overrides = copy.copy(kwargs.pop("scalar_overrides", {}))
+        if bytes not in scalar_overrides:
+            scalar_overrides[bytes] = Binary
+            scalar_overrides[dict] = JSON
+        kwargs["scalar_overrides"] = scalar_overrides
+        super().__init__(*args, **kwargs)
 
 
-class ErrorRaisingSchema(strawberry.Schema):
+class ErrorRaisingSchema(Schema):
     def process_errors(
         self,
         errors,

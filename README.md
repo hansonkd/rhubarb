@@ -72,10 +72,7 @@ class Query:
 
     
 schema = Schema(
-    query=Query,
-    extensions=[
-        RhubarbExtension
-    ]
+    query=Query
 )
 ```
 
@@ -92,8 +89,7 @@ Currently, Rhubarb only does a few optimizations but they cover most use cases:
 * Combining aggregates if they use same `GROUP BY`
 
 ```python
-from rhubarb.connection import connection
-
+from rhubarb.contrib.postgres.connection import connection
 
 async with connection() as conn:
     res = await schema.execute(
@@ -172,13 +168,14 @@ You can also make queries outside of GQL like a normal ORM. However the optimiza
 
 ```python
 from rhubarb import query, Desc
-from rhubarb.connection import connection
-
+from rhubarb.contrib.postgres.connection import connection
 
 async with connection() as conn:
     person_list: list[Person] = await query(Person, conn).as_list()
-    limited_person_list: list[Person] = await query(Person, conn).where(lambda x: x.a_bool_column == True).limit(5).as_list()
-    other_table_list: list[TableWithoutSuperClass] = await query(Person, conn).select(lambda x: x.other_table()).as_list()
+    limited_person_list: list[Person] = await query(Person, conn).where(lambda x: x.a_bool_column == True).limit(
+        5).as_list()
+    other_table_list: list[TableWithoutSuperClass] = await query(Person, conn).select(
+        lambda x: x.other_table()).as_list()
     bool_list: list[bool] = await query(Person, conn).select(lambda x: x.int_is_big()).as_list()
     one_person = await query(Person, conn).one()
     recent_person = await query(Person, conn).order_by(lambda x: Desc(x.example_date_col)).one()
@@ -407,10 +404,7 @@ class Mutation:
     
 schema = Schema(
     query=Query,
-    mutation=Mutation,
-    extensions=[
-        RhubarbExtension
-    ]
+    mutation=Mutation
 )
 ```
 # Migrations
@@ -564,7 +558,7 @@ There are some convenience superclasses that will add primary keys and utility f
 * BaseIntModel - SERIAL Primary Key
 * BaseIntUpdateAtModel - SERIAL Primary Key, created_at, updated_at fields.
 
-# Built-in Types
+# Built-in Column / Sql Types
 
 
 * `dict` -> `JSONB`
@@ -584,4 +578,7 @@ There are some convenience superclasses that will add primary keys and utility f
 * `datetime.datetime` -> `TIMESTAMPTZ`
 * `datetime.date` -> `DATE`
 * `uuid.UUID` -> `UUID`
+* `phonenumbers.PhoneNumber` -> `TEXT`
+* `rhubarb.PhoneNumber` -> `TEXT`
+* `rhubarb.Email` -> `TEXT`
 * `None` -> `NULL` (cannot use as column, use Optional instead.)

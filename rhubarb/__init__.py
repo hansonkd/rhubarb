@@ -1,4 +1,4 @@
-from .core import get_conn, Binary
+from .core import get_conn, Binary, PhoneNumber, Email
 from .crud import save, query, update, insert, insert_objs, delete
 from .errors import RhubarbException
 from .extension import RhubarbExtension

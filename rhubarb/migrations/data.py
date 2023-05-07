@@ -2,7 +2,7 @@ import copy
 import inspect
 import pprint
 from typing import Callable, Type, Any, Awaitable, Optional, Self
-from rhubarb.core import SupportsSqlModel, T, UNSET, DEFAULT_SQL_FUNCTION, Unset
+from rhubarb.core import SqlModel, T, UNSET, DEFAULT_SQL_FUNCTION, Unset
 from rhubarb.errors import RhubarbException
 from rhubarb.object_set import (
     SQLBuilder,
@@ -194,7 +194,7 @@ class CreateColumn(AlterOperation):
     references: FrozenReference = None
 
     def __sql__(self, builder: SQLBuilder):
-        builder.write(f"ADD COLUMN {self.name} {self.type.raw_sql}")
+        builder.write(f"ADD COLUMN {self.name} {self.type.sql}")
         if self.type.optional:
             builder.write(" NULL")
         else:
@@ -206,7 +206,7 @@ class CreateColumn(AlterOperation):
                 builder.write(f" DEFAULT {default}")
             else:
                 builder.write(f" DEFAULT ")
-                builder.write_value(default)
+                builder.write_value(default, self.type)
 
         if self.references:
             builder.write(f" REFERENCES {self.references.table_name}")
@@ -249,7 +249,7 @@ class AlterTypeUsing:
         builder.write(f"ALTER {self.name} TYPE ")
         self.new_type.__sql__(builder)
         if self.using is None:
-            using = f"{self.name}::TEXT::{self.new_type.raw_sql}"
+            using = f"{self.name}::TEXT::{self.new_type.sql}"
         else:
             using = self.using
         builder.write(f" USING {using}")
@@ -265,6 +265,7 @@ class AlterTypeUsing:
 @dataclasses.dataclass(frozen=True)
 class SetDefault:
     name: str
+    type: SqlType
     default: DEFAULT_SQL_FUNCTION | None = None
 
     def __sql__(self, builder: SQLBuilder):
@@ -274,7 +275,7 @@ class SetDefault:
             builder.write(f" DEFAULT {default}")
         else:
             builder.write(f" DEFAULT ")
-            builder.write_value(default)
+            builder.write_value(default, self.type)
 
     def alter(self, table):
         columns = copy.copy(table.columns)
@@ -515,7 +516,7 @@ class CreateTable(MigrationOperation):
             if wrote_val:
                 builder.write(", ")
             wrote_val = True
-            builder.write(f"{column.name} {column.type.raw_sql}")
+            builder.write(f"{column.name} {column.type.sql}")
             if column.type.optional:
                 builder.write(" NULL")
             else:
@@ -528,7 +529,7 @@ class CreateTable(MigrationOperation):
                     builder.write(f" DEFAULT {default}")
                 else:
                     builder.write(f" DEFAULT ")
-                    builder.write_value(default)
+                    builder.write_value(default, column.type)
 
             if column.references:
                 constraint_name = column.references.compute_constraint_name(column.name)
@@ -697,7 +698,7 @@ class SetMeta(MigrationOperation):
 class MigrationInfo:
     state: MigrationStateDatabase
     conn: AsyncConnection
-    _model_cache: dict[(str, str), Type[SupportsSqlModel]] = dataclasses.field(
+    _model_cache: dict[(str, str), Type[SqlModel]] = dataclasses.field(
         default_factory=dict
     )
 

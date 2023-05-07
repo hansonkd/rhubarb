@@ -27,6 +27,7 @@ from typing import (
     Awaitable,
 )
 
+import phonenumbers
 import strawberry
 from psycopg import Connection, AsyncConnection
 from psycopg.rows import dict_row
@@ -40,7 +41,7 @@ from strawberry.types.nodes import SelectedField, FragmentSpread, InlineFragment
 from rhubarb.core import (
     T,
     V,
-    SupportsSqlModel,
+    SqlModel,
     J,
     UNSET,
     DEFAULT_SQL_FUNCTION,
@@ -50,6 +51,8 @@ from rhubarb.core import (
     Unset,
     Binary,
     Serial,
+    Email,
+    PhoneNumber, Password,
 )
 from rhubarb.errors import RhubarbException
 from strawberry.field import StrawberryField
@@ -60,7 +63,7 @@ ON_DELETE = Literal["CASCADE", "NO ACTION", "SET NULL", "RESTRICT"]
 SelectedFields = list[SelectedField | FragmentSpread | InlineFragment]
 
 
-@dataclasses.dataclass(kw_only=True)
+@dataclasses.dataclass(kw_only=True, frozen=True)
 class SqlType:
     raw_sql: str
     optional: bool = False
@@ -68,6 +71,10 @@ class SqlType:
 
     def __sql__(self, builder: SQLBuilder):
         builder.write(self.raw_sql)
+
+    @property
+    def sql(self) -> str:
+        return self.raw_sql
 
     def to_python(self) -> Type:
         if self.python_type:
@@ -105,39 +112,57 @@ class SqlType:
         if hasattr(t, "__sql_type__"):
             return t.__sql_type__()
         elif t == JSON:
-            return cls(raw_sql="JSONB")
-        elif t in (Binary, Base64, Base32, Base16):
-            return cls(raw_sql="BYTEA")
+            return TYPE_JSON
+        elif t in (Password, Binary, Base64, Base32, Base16):
+            return TYPE_BYTEA
         elif t == Serial:
-            return cls(raw_sql="SERIAL")
+            return TYPE_SERIAL
+        elif t in (Email, PhoneNumber):
+            return TYPE_TEXT
         elif isinstance(t, StrawberryOptional):
             inner_type = cls.from_python(t.of_type)
-            inner_type.optional = True
-            return inner_type
-        elif issubclass(t, bool):
-            return cls(raw_sql="BOOLEAN")
-        elif issubclass(t, int):
-            return cls(raw_sql="BIGINT")
-        elif issubclass(t, float):
-            return cls(raw_sql="FLOAT")
-        elif issubclass(t, str):
-            return cls(raw_sql="TEXT")
-        elif issubclass(t, bytes):
-            return cls(raw_sql="BYTEA")
-        elif issubclass(t, datetime.datetime):
-            return cls(raw_sql="TIMESTAMPTZ")
-        elif issubclass(t, datetime.date):
-            return cls(raw_sql="DATE")
-        elif issubclass(t, uuid.UUID):
-            return cls(raw_sql="UUID")
-        elif issubclass(t, (dict, list)):
-            return cls(raw_sql="JSON")
+            return dataclasses.replace(inner_type, optional=True)
+        elif isinstance(t, StrawberryList):
+            return TYPE_JSON
+        elif isinstance(t, phonenumbers.PhoneNumber):
+            return TYPE_TEXT
+        if inspect.isclass(t):
+            if issubclass(t, bool):
+                return TYPE_BOOLEAN
+            elif issubclass(t, int):
+                return TYPE_BIGINT
+            elif issubclass(t, float):
+                return TYPE_FLOAT
+            elif issubclass(t, str):
+                return TYPE_TEXT
+            elif issubclass(t, bytes):
+                return TYPE_BYTEA
+            elif issubclass(t, datetime.datetime):
+                return TYPE_TIMESTAMP
+            elif issubclass(t, datetime.date):
+                return TYPE_DATE
+            elif issubclass(t, uuid.UUID):
+                return TYPE_UUID
+            elif issubclass(t, (dict, list)):
+                return TYPE_JSON
         raise RhubarbException(
             f"InvalidSQL Type: {t} cannot be made into a valid SQLType"
         )
 
     def __repr__(self):
         return f"SqlType(raw_sql='{self.raw_sql}', optional={self.optional})"
+
+
+TYPE_UUID = SqlType(raw_sql="UUID")
+TYPE_JSON = SqlType(raw_sql="JSON")
+TYPE_DATE = SqlType(raw_sql="DATE")
+TYPE_TIMESTAMP = SqlType(raw_sql="TIMESTAMPTZ")
+TYPE_TEXT = SqlType(raw_sql="TEXT")
+TYPE_FLOAT = SqlType(raw_sql="FLOAT")
+TYPE_BIGINT = SqlType(raw_sql="BIGINT")
+TYPE_BOOLEAN = SqlType(raw_sql="BOOLEAN")
+TYPE_SERIAL = SqlType(raw_sql="SERIAL")
+TYPE_BYTEA = SqlType(raw_sql="BYTEA")
 
 
 class SQLBuilder:
@@ -190,18 +215,20 @@ class SQLBuilder:
         self.write(f" AS {alias}")
         return alias
 
-    def write_value(self, v: Any):
+    def write_value(self, v: Any, sql_type=None):
         if hasattr(v, "__sql__"):
             v.__sql__(self)
         else:
             if v is None:
                 self.write("NULL")
+            elif isinstance(v, list):
+                self.write(f"'{v}'::{sql_type.sql}")
             else:
-                sql_type = SqlType.from_python(type(v))
+                sql_type = sql_type or SqlType.from_python(type(v))
                 if self.dml_mode:
-                    self.write(f"'{v}'::{sql_type.raw_sql}")
+                    self.write(f"'{v}'::{sql_type.sql}")
                 else:
-                    self.write(f"%s::{sql_type.raw_sql}")
+                    self.write(f"%s::{sql_type.sql}")
                     if isinstance(v, (dict, list)):
                         v = Jsonb(v, dumps=uuid_dumps)
                     self.vars.append(v)
@@ -211,7 +238,7 @@ class UUIDEncoder(json.JSONEncoder):
     """A JSON encoder which can dump UUID."""
 
     def default(self, obj):
-        if isinstance(obj, uuid.UUID):
+        if isinstance(obj, (phonenumbers.PhoneNumber, uuid.UUID)):
             return str(obj)
         return json.JSONEncoder.default(self, obj)
 
@@ -591,64 +618,6 @@ class WrappedSelector(Selector[V]):
         return getattr(self._selector, item)
 
 
-# class WildCardSelector(Selector[V]):
-#     def __init__(self, model_reference: ModelReference):
-#         self._model_reference = model_reference
-#
-#     def __sql__(self, builder: SQLBuilder):
-#         builder.start_selection()
-#         builder.write(f"{self._model_reference.alias()}.*")
-#
-#     def __extractor__(self, builder: SQLBuilder) -> Extractor:
-#         self.__sql__(builder)
-#         return SimpleExtractor(None, None, None)
-#
-
-# class GQLFieldWrappedSelector(Selector[V]):
-#     def __init__(
-#         self,
-#         selector: Selector[V],
-#         field: StrawberryField[V],
-#         # model: Type[SupportsSqlModel],
-#         model_reference: ModelReference,
-#     ):
-#         self.selector = selector
-#         self.field = field
-#         self._model_reference = model_reference
-#
-#     def __model_reference__(self) -> Optional[ModelReference]:
-#         return self._model_reference
-#
-#     def __inner_selector__(self) -> Selector:
-#         return self.selector
-#
-#     def __sql__(self, builder: SQLBuilder):
-#         return self.selector.__sql__(builder)
-#
-#     def __extractor__(self, builder: SQLBuilder, alias: str = None) -> Extractor:
-#         if (
-#             isinstance(self.selector, Aggregate)
-#             and self.selector._model_selector._join
-#         ):
-#             return ColumnSelector(
-#                 self.selector._model_selector._model_reference,
-#                 self.field,
-#                 self.selector._model_selector._join,
-#             ).__extractor__(builder, alias)
-#         return self.selector.__extractor__(builder, alias)
-#
-#     def __joins__(self) -> Iterator[(str, Join, str)]:
-#         if (
-#             isinstance(self.selector, Aggregate)
-#             and self.selector._model_selector._join
-#         ):
-#             join = self.selector._model_selector._join
-#             yield join.id, join, self.field.name
-#         else:
-#             yield from self.selector.__joins__()
-#
-
-
 class Computed(Selector[V]):
     def __init__(self, args: list[Selector], op: str, sep=",", infixed=True):
         self._args = args
@@ -709,8 +678,9 @@ class Case(Selector[V]):
 
 
 class Value(Selector[V]):
-    def __init__(self, val: V):
+    def __init__(self, val: V, sql_type=None):
         self.val = val
+        self.sql_type = sql_type
 
     def __sql__(self, builder: SQLBuilder):
         builder.write_value(self.val)
@@ -996,7 +966,7 @@ class ModelSelector(Selector[T]):
             reference: ModelReference = object.__getattribute__(
                 self, "_model_reference"
             )
-            model: SupportsSqlModel = reference.model
+            model: SqlModel = reference.model
             type_def: TypeDefinition = model._type_definition
 
             if field := type_def.get_field(item):
@@ -1134,8 +1104,8 @@ OrderBySelector = TypeVar(
     AscDesc,
     tuple[AscDesc, ...],
 )
-WhereSelector = TypeVar("WhereSelector", bound=Selector[bool])
-NewWhereSelector = TypeVar("NewWhereSelector", bound=Selector[bool])
+WhereSelector = TypeVar("WhereSelector", Selector[bool], bool)
+NewWhereSelector = TypeVar("NewWhereSelector", Selector[bool], bool)
 PkValue = int | uuid.UUID | str
 
 
@@ -1219,6 +1189,29 @@ class ObjectSet(Generic[T, S]):
 
         new_self.sync_joins(new_self.selection)
         return new_self
+
+    def update(self, set_fn: Callable[[ModelUpdater[T]], None]) -> UpdateSet[T, V]:
+        model_updater = ModelUpdater(self.model_selector)
+        set_fn(model_updater)
+        setters = model_updater._setters
+
+        return UpdateSet(
+            model_reference=self.model_reference,
+            conn=self.conn,
+            where=self.where_clause,
+            one=self._one,
+            returning=self.selection,
+            setters=setters,
+        )
+
+    def delete(self) -> DeleteSet[T, V]:
+        return DeleteSet(
+            model_reference=self.model_reference,
+            conn=self.conn,
+            where=self.where_clause,
+            one=self._one,
+            returning=self.selection,
+        )
 
     async def sync_cache(self, new_self):
         if (
@@ -1490,7 +1483,61 @@ class ObjectSet(Generic[T, S]):
                 main_extractor.add_to_cache(self.cache, pk, value)
 
 
-class InsertSet(Generic[T, V]):
+class MutationSet:
+    model_reference: ModelReference
+    model: Type[SqlModel]
+    conn: AsyncConnection
+    _one: bool
+
+    async def as_object_set(self, info):
+        self.returning = ModelSelector(
+            self.model_reference,
+            selected_fields=[
+                SelectedField(name=n, arguments={}, directives={}, selections=[])
+                for n in pk_column_names(self.model)
+            ],
+        )
+        objects = await self.execute()
+        if self._one:
+            pks = [pk_concrete(objects)]
+        else:
+            pks = [pk_concrete(obj) for obj in objects]
+        return ObjectSet(self.model, self.conn, info, one=self._one).where(
+            lambda obj: func("IN", pk_selection(obj), func("", *pks), infixed=True)
+        )
+
+    async def do_execute(self, builder, returning_extractor, one):
+        if returning_extractor is not None:
+            async with self.conn.cursor(row_factory=dict_row) as cur:
+                await cur.execute(builder.q, builder.vars)
+                return_rows = []
+                async for row in cur:
+                    value = await returning_extractor.extract(row)
+                    if one or one is None and self._one:
+                        return value
+                    return_rows.append(value)
+                return return_rows
+        else:
+            await self.conn.execute(builder.q, builder.vars)
+
+    @overload
+    async def execute(self) -> list[V]:
+        ...
+
+    @overload
+    async def execute(self, one: bool = True) -> V:
+        ...
+
+    async def execute(self, one=None):
+        builder = SQLBuilder()
+        returning_extractor = self.build_statement(builder)
+        return await self.do_execute(builder, returning_extractor, one)
+
+    def build_statement(self, builder: SQLBuilder) -> Extractor:
+        raise NotImplementedError
+
+
+class InsertSet(MutationSet, Generic[T, V]):
     def __init__(
         self,
         model_reference: ModelReference[T],
@@ -1510,30 +1557,6 @@ class InsertSet(Generic[T, V]):
         self.values = values
         self.returning = returning
         self._one = one
-
-    @overload
-    async def execute(self) -> list[V]:
-        ...
-
-    @overload
-    async def execute(self, one: bool = True) -> V:
-        ...
-
-    async def execute(self, one=False):
-        builder = SQLBuilder()
-        returning_extractor = self.build_insert_statement(builder)
-        if returning_extractor is not None:
-            async with self.conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute(builder.q, builder.vars)
-                return_rows = []
-                async for row in cur:
-                    value = await returning_extractor.extract(row)
-                    if one:
-                        return value
-                    return_rows.append(value)
-                return return_rows
-        else:
-            await self.conn.execute(builder.q, builder.vars)
 
     def start_sql_statement(self, builder: SQLBuilder):
         builder.write("INSERT INTO ")
@@ -1556,36 +1579,22 @@ class InsertSet(Generic[T, V]):
             wrote_row = True
             builder.write("(")
             wrote_v = False
-            for v in row:
+            for column_field, v in zip(self.columns, row):
                 if wrote_v:
                     builder.write(", ")
                 wrote_v = True
-                builder.write_value(v)
+                builder.write_value(v, column_field.column_type)
             builder.write(")")
 
-    def build_insert_statement(self, builder: SQLBuilder):
+    def build_statement(self, builder: SQLBuilder):
         self.start_sql_statement(builder)
 
         if self.returning is not None:
             builder.write(" RETURNING ")
             return self.returning.__extractor__(builder)
 
-    async def as_object_set(self, info):
-        self.returning = ModelSelector(
-            self.model_reference,
-            selected_fields=[
-                SelectedField(name=n, arguments={}, directives={}, selections=[])
-                for n in pk_column_names(self.model)
-            ],
-        )
-        objects = await self.execute()
-        pks = [pk_concrete(obj) for obj in objects]
-        return ObjectSet(self.model, self.conn, info, one=self._one).where(
-            lambda obj: func("IN", pk_selection(obj), func("", *pks), infixed=True)
-        )
 
-
-class ModelUpdater(Generic[T]):
+class ModelUpdater(MutationSet, Generic[T]):
     def __init__(self, selector: ModelSelector):
         self._selector = selector
         self._setters = {}
@@ -1607,7 +1616,54 @@ class ModelUpdater(Generic[T]):
             )
 
 
-class UpdateSet(Generic[T, V]):
+class UpdateDeleteSet(MutationSet):
+    where_clause: Selector[bool]
+    joins: dict[str, Join]
+    join_fields: defaultdict[str, set[str]]
+    seen_join_fields: set[(str, str)]
+
+    def sync_joins(self, clause):
+        for join_id, join, join_field in joins(clause, seen=self.seen_join_fields):
+            self.joins.setdefault(join_id, join)
+            self.join_fields[join_id].add(join_field)
+
+    def start_sql_statement(self, builder: SQLBuilder):
+        raise NotImplementedError
+
+    def build_statement(self, builder: SQLBuilder):
+        self.start_sql_statement(builder)
+
+        wrote_join = False
+        where_clause = self.where_clause
+        for join_id, join in self.joins.items():
+            if not wrote_join:
+                wrote_join = True
+                builder.write(" FROM ")
+                join.__sql__(builder, self.join_fields[join_id])
+                builder.write(" AS ")
+                builder.write(join.model_reference.alias())
+                if where_clause is not None:
+                    where_clause &= join.on
+                else:
+                    where_clause = join.on
+            else:
+                builder.write(" LEFT JOIN ")
+                join.__sql__(builder, self.join_fields[join_id])
+                builder.write(" AS ")
+                builder.write(join.model_reference.alias())
+                builder.write(" ON ")
+                join.on.__sql__(builder)
+
+        if where_clause is not None:
+            builder.write(" WHERE ")
+            where_clause.__sql__(builder)
+
+        if self.returning is not None:
+            builder.write(" RETURNING ")
+            return self.returning.__extractor__(builder)
+
+
+class UpdateSet(UpdateDeleteSet, Generic[T, V]):
     def __init__(
         self,
         model_reference: ModelReference[T],
@@ -1638,49 +1694,6 @@ class UpdateSet(Generic[T, V]):
         if returning is not None:
             self.sync_joins(self.returning)
 
-    async def as_object_set(self, info):
-        self.returning = ModelSelector(
-            self.model_reference,
-            selected_fields=[
-                SelectedField(name=n, arguments={}, directives={}, selections=[])
-                for n in pk_column_names(self.model)
-            ],
-        )
-        objects = await self.execute()
-        pks = [pk_concrete(obj) for obj in objects]
-        return ObjectSet(self.model, self.conn, info, one=self._one).where(
-            lambda obj: func("IN", pk_selection(obj), func("", *pks), infixed=True)
-        )
-
-    def sync_joins(self, clause):
-        for join_id, join, join_field in joins(clause, seen=self.seen_join_fields):
-            self.joins.setdefault(join_id, join)
-            self.join_fields[join_id].add(join_field)
-
-    @overload
-    async def execute(self) -> list[V]:
-        ...
-
-    @overload
-    async def execute(self, one: bool = True) -> V:
-        ...
-
-    async def execute(self, one=None):
-        builder = SQLBuilder()
-        returning_extractor = self.build_update_statement(builder)
-        if returning_extractor is not None:
-            async with self.conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute(builder.q, builder.vars)
-                return_rows = []
-                async for row in cur:
-                    value = await returning_extractor.extract(row)
-                    if one:
-                        return value
-                    return_rows.append(value)
-                return return_rows
-        else:
-            await self.conn.execute(builder.q, builder.vars)
-
     def start_sql_statement(self, builder: SQLBuilder):
         builder.write("UPDATE ")
         self.model_reference.__sql__(builder)
@@ -1695,45 +1708,14 @@ class UpdateSet(Generic[T, V]):
             builder.write(f"{k} = ")
             builder.write_value(v)
 
-    def build_update_statement(self, builder: SQLBuilder):
-        self.start_sql_statement(builder)
 
-        wrote_join = False
-        where_clause = self.where_clause
-        for join_id, join in self.joins.items():
-            if not wrote_join:
-                wrote_join = True
-                builder.write(" FROM ")
-                join.__sql__(builder, self.join_fields[join_id])
-                builder.write(" AS ")
-                builder.write(join.model_reference.alias())
-                if where_clause is not None:
-                    where_clause &= join.on
-                else:
-                    where_clause = join.on
-            else:
-                builder.write(" LEFT JOIN ")
-                join.__sql__(builder, self.join_fields[join_id])
-                builder.write(" AS ")
-                builder.write(join.model_reference.alias())
-                builder.write(" ON ")
-                join.on.__sql__(builder)
-
-        if where_clause is not None:
-            builder.write(" WHERE ")
-            where_clause.__sql__(builder)
-
-        if self.returning is not None:
-            builder.write(" RETURNING ")
-            return self.returning.__extractor__(builder)
-
-
-class DeleteSet(Generic[T, V]):
+class DeleteSet(UpdateDeleteSet, Generic[T, V]):
     def __init__(
         self,
         model_reference: ModelReference[T],
         conn: AsyncConnection,
         where: Selector[bool],
+        one: bool = False,
         returning: Selector[V] | None = None,
     ):
         self.where_clause = where
@@ -1745,77 +1727,16 @@ class DeleteSet(Generic[T, V]):
         self.joins: dict[str, Join] = {}
         self.join_fields: defaultdict[str, set[str]] = defaultdict(set)
         self.seen_join_fields: set[(str, str)] = set()
-
+        self._one = one
         self.sync_joins(self.where)
         if returning is not None:
             self.sync_joins(self.returning)
-
-    def sync_joins(self, clause):
-        for join_id, join, join_field in joins(clause, seen=self.seen_join_fields):
-            self.joins.setdefault(join_id, join)
-            self.join_fields[join_id].add(join_field)
-
-    @overload
-    async def execute(self) -> list[V]:
-        ...
-
-    @overload
-    async def execute(self, one: bool = True) -> V:
-        ...
-
-    async def execute(self, one=None):
-        builder = SQLBuilder()
-        returning_extractor = self.build_delete_statement(builder)
-        if returning_extractor is not None:
-            async with self.conn.cursor(row_factory=dict_row) as cur:
-                await cur.execute(builder.q, builder.vars)
-                return_rows = []
-                async for row in cur:
-                    value = await returning_extractor.extract(row)
-                    if one:
-                        return value
-                    return_rows.append(value)
-                return return_rows
-        else:
-            await self.conn.execute(builder.q, builder.vars)
 
     def start_sql_statement(self, builder: SQLBuilder):
         builder.write("DELETE FROM ")
         self.model_reference.__sql__(builder)
         builder.write(" AS ")
         builder.write(self.model_reference.alias())
-
-    def build_delete_statement(self, builder: SQLBuilder):
-        self.start_sql_statement(builder)
-
-        wrote_join = False
-        where_clause = self.where_clause
-        for join_id, join in self.joins.items():
-            if not wrote_join:
-                wrote_join = True
-                builder.write(" FROM ")
-                join.__sql__(builder, self.join_fields[join_id])
-                builder.write(" AS ")
-                builder.write(join.model_reference.alias())
-                if where_clause is not None:
-                    where_clause &= join.on
-                else:
-                    where_clause = join.on
-            else:
-                builder.write(" LEFT JOIN ")
-                join.__sql__(builder, self.join_fields[join_id])
-                builder.write(" AS ")
-                builder.write(join.model_reference.alias())
-                builder.write(" ON ")
-                join.on.__sql__(builder)
-
-        if where_clause is not None:
-            builder.write(" WHERE ")
-            where_clause.__sql__(builder)
-
-        if self.returning is not None:
-            builder.write(" RETURNING ")
-            return self.returning.__extractor__(builder)
 
 
 def pk_concrete(
@@ -2048,7 +1969,7 @@ def references(
 class Registry:
     id: int = dataclasses.field(default_factory=new_ref_id)
     prefix: str = None
-    entries: list[SupportsSqlModel] = dataclasses.field(default_factory=list)
+    entries: list[SqlModel] = dataclasses.field(default_factory=list)
     other_registries: dict[int, Self] = dataclasses.field(default_factory=dict)
 
     def real_table_name(self, cls: Type[T]):
@@ -2143,6 +2064,9 @@ def table(
 
 
 def set_real_table_name(registry, cls):
+    if not hasattr(cls, "__schema__"):
+        cls.__schema__ = "public"
+
     registry = registry or DEFAULT_REGISTRY
     if not getattr(cls, "__rewrote_table", False):
         cls.__rewrote_table = True
@@ -2285,7 +2209,6 @@ def python_field(
         [ModelSelector], list[Selector] | Selector | dict[str, Selector]
     ]
 ) -> Callable[[PyF], ColumnField]:
-
     def wrap(fn: staticmethod):
         wrapped_field = strawberry.field(fn)
         sig = inspect.signature(fn)
@@ -2351,7 +2274,7 @@ def func(fn: str, *args: Selector, infixed=False):
     return Computed(list(args), op=fn, infixed=infixed)
 
 
-def resolve_group_by(model: SupportsSqlModel, selector: ModelSelector):
+def resolve_group_by(model: SqlModel, selector: ModelSelector):
     gb_result = model.__group_by__(selector)
     if isinstance(gb_result, tuple):
         model_pk = tuple(f for f in gb_result)

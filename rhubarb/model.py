@@ -2,12 +2,12 @@ import dataclasses
 import datetime
 import uuid
 
-from rhubarb.core import SupportsSqlModel, Serial
+from rhubarb.core import SqlModel, Serial
 from rhubarb.object_set import column
 
 
 @dataclasses.dataclass
-class BaseModel(SupportsSqlModel):
+class BaseModel(SqlModel):
     __schema__ = "public"
     __pk__ = "id"
     id: uuid.UUID = column(sql_default="uuid_generate_v4()")

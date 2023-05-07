@@ -1,10 +1,18 @@
 import copy
-from typing import Type, Callable
+from typing import Type, Callable, Optional
 
-from psycopg import AsyncConnection
+import psycopg.errors
+from psycopg import AsyncConnection, Rollback
 from strawberry.types import Info
 
-from rhubarb.core import default_function_to_python, T, V, call_with_maybe_info, Unset
+from rhubarb.core import (
+    default_function_to_python,
+    T,
+    V,
+    call_with_maybe_info,
+    Unset,
+    SQLValue,
+)
 from rhubarb.object_set import (
     InsertSet,
     columns,
@@ -17,6 +25,7 @@ from rhubarb.object_set import (
     UpdateSet,
     DeleteSet,
     ModelUpdater,
+    pk_selection,
 )
 
 
@@ -26,11 +35,23 @@ def query(
     return ObjectSet(m, conn=conn, info=info)
 
 
+def by_pk(
+    m: Type[T],
+    pk: SQLValue | tuple[SQLValue, ...],
+    conn: AsyncConnection,
+    info: Info = None,
+) -> ObjectSet[T, ModelSelector[T]]:
+    return ObjectSet(m, conn=conn, info=info, one=True).where(
+        lambda x: pk_selection(x) == pk
+    )
+
+
 def delete(
     model: Type[T],
     conn: AsyncConnection,
     where: Callable[[ModelSelector], Selector[bool] | bool],
     info: Info | None = None,
+    one: bool = False,
     returning: Callable[[ModelSelector], Selector[bool] | bool] | None | bool = None,
 ):
     selected_fields = info.selected_fields
@@ -45,6 +66,7 @@ def delete(
         conn=conn,
         where=where_selector,
         returning=returning_selector,
+        one=one,
     )
 
 
@@ -111,8 +133,28 @@ def update(
     )
 
 
-async def save(obj: T, conn: AsyncConnection, info: Info | None = None):
+async def find_or_create(
+    obj: T, conn: AsyncConnection, pk: SQLValue | tuple[SQLValue], info: Info = None
+) -> T:
     model = obj.__class__
+    async with conn.transaction() as txn:
+        try:
+            return await save(obj, conn, info=info).execute()
+        except psycopg.errors.UniqueViolation:
+            raise Rollback(txn)
+    return await by_pk(model, pk, conn, info=info).one()
+
+
+def empty_pk(obj: T):
+    pk = pk_concrete(obj)
+    return pk is None or isinstance(obj, tuple) and all(p is None for p in pk)
+
+
+def save(obj: T, conn: AsyncConnection, info: Info | None = None):
+    model = obj.__class__
+    if empty_pk(obj):
+        return insert_objs(model, conn, [obj], one=True)
+
     object_set = ObjectSet(model, conn=conn, info=info)
     model_reference = object_set.model_reference
     model_selector = object_set.model_selector

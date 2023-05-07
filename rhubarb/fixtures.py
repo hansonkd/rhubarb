@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 from psycopg import AsyncConnection
 
-from rhubarb.connection import connection
+from rhubarb.contrib.postgres.connection import connection
 from rhubarb.config import _program_state, Config, PostgresConfig
 
 
@@ -14,7 +14,7 @@ def rhubarb(config_override):
     with config_override(
         Config(
             postgres=PostgresConfig(
-                host="localhost", dbname="debug", password="debug", user="debug"
+                host="127.0.0.1", dbname="debug", password="debug", user="debug"
             )
         )
     ):
@@ -37,6 +37,6 @@ def config_override() -> Callable[[Config], ContextManager]:
 
 @pytest_asyncio.fixture
 async def postgres_connection(rhubarb) -> AsyncConnection:
-    async with connection() as conn:
+    async with connection(timeout=1) as conn:
         async with conn.transaction(force_rollback=True):
             yield conn

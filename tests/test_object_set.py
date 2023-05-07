@@ -2,7 +2,7 @@ from collections import defaultdict
 
 import pytest
 
-from rhubarb.connection import track_queries
+from rhubarb.contrib.postgres.connection_base import track_queries
 
 
 @pytest.mark.asyncio
@@ -277,7 +277,7 @@ async def test_delete(schema, postgres_connection, basic_data):
 
     with track_queries() as tracker:
         res = await schema.execute(
-            "mutation Delete($book_id: UUID!) { delete_book(book_id: $book_id) { id } }",
+            "mutation Delete($book_id: UUID!) { delete_book(book_id: $book_id) }",
             context_value={"conn": conn},
             variable_values={
                 "book_id": str(first_book.id),
@@ -285,8 +285,7 @@ async def test_delete(schema, postgres_connection, basic_data):
         )
         assert res.errors is None
         assert len(tracker.queries) == 1
-        assert res.data["delete_book"]
-        assert res.data["delete_book"]["id"] == str(first_book.id)
+        assert res.data["delete_book"] == str(first_book.id)
 
     res = await schema.execute(
         "query { all_books { id }}", context_value={"conn": conn}

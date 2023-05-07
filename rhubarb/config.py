@@ -2,7 +2,17 @@ import importlib
 import os
 import dataclasses
 from pathlib import Path
+from typing import Optional
 
+from cachetools import TTLCache, Cache
+
+from rhubarb.contrib.email.config import EmailConfig
+from rhubarb.contrib.postgres.config import PostgresConfig, load_postgres_config
+from rhubarb.contrib.redis.config import RedisConfig, load_redis_config
+from rhubarb.contrib.users.config import UserConfig
+from rhubarb.contrib.sessions.config import SessionConfig
+from rhubarb.contrib.audit.config import AuditConfig
+from rhubarb.env import str_env, int_env
 from rhubarb.errors import RhubarbException
 from rhubarb.object_set import Registry, DEFAULT_REGISTRY
 
@@ -33,19 +43,18 @@ def init_rhubarb():
 
 
 @dataclasses.dataclass(frozen=True)
-class PostgresConfig:
-    host: str = os.getenv("PG_HOST", "localhost")
-    port: int = os.getenv("PG_PORT", 5432)
-    user: str = os.getenv("PG_USER", "postgres")
-    password: str = os.getenv("PG_PASSWORD", "postgres")
-    dbname: str = os.getenv("PG_HOST", "postgres")
-
-
-@dataclasses.dataclass(frozen=True)
 class Config:
     migration_directory: Path = Path("./migrations")
     registry: Registry = dataclasses.field(default_factory=lambda: DEFAULT_REGISTRY)
-    postgres: PostgresConfig = dataclasses.field(default_factory=PostgresConfig)
+    postgres: PostgresConfig = dataclasses.field(default_factory=load_postgres_config)
+    redis: RedisConfig = dataclasses.field(default_factory=load_redis_config)
+    users: UserConfig = dataclasses.field(default_factory=UserConfig)
+    audit: AuditConfig = dataclasses.field(default_factory=AuditConfig)
+    sessions: SessionConfig = dataclasses.field(default_factory=SessionConfig)
+    localcache: Cache = dataclasses.field(
+        default_factory=lambda: TTLCache(maxsize=1024, ttl=600)
+    )
+    email: EmailConfig = dataclasses.field(default_factory=lambda: EmailConfig())
 
 
 def config() -> Config:

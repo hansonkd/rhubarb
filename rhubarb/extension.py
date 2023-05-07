@@ -13,6 +13,7 @@ from rhubarb.object_set import (
     WrappedSelector,
     UpdateSet,
     InsertSet,
+    MutationSet,
 )
 
 
@@ -74,7 +75,7 @@ class RhubarbExtension(SchemaExtension):
             result = _next(root, info, *args, **kwargs)
             if inspect.isawaitable(result):
                 result = await result
-            if isinstance(result, (InsertSet, UpdateSet)):
+            if isinstance(result, MutationSet):
                 result = await result.as_object_set(real_info)
             if isinstance(result, ObjectSet):
                 result = result.select(

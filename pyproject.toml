@@ -11,6 +11,13 @@ strawberry-graphql = "^0.174.0"
 psycopg = "^3.1.8"
 pytest-asyncio = "^0.21.0"
 asgiref = "^3.6.0"
+phonenumbers = "^8.13.11"
+cachetools = "^5.3.0"
+aiosmtplib = "^2.0.1"
+psycopg-pool = "^3.1.7"
+redis = "^4.5.4"
+starlette-session = "^0.4.3"
+bcrypt = "^4.0.1"
 
 
 [tool.poetry.group.test.dependencies]
