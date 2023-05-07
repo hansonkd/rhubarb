@@ -14,7 +14,7 @@ import strawberry
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 
-from rhubarb.core import get_conn, Binary, PhoneNumber, Email
+from rhubarb.core import get_conn, Binary, PhoneNumber, Email, RhubarbPhoneNumber
 from rhubarb.crud import delete, save, insert_objs, update, query, by_pk
 from rhubarb.extension import RhubarbExtension
 from rhubarb.fixtures import *  # noqa
@@ -100,7 +100,7 @@ async def basic_data(postgres_connection, run_migrations):
                 published_on=datetime.date(2023, 9, 3),
                 internal_bin_info=bytes(range(256)),
                 meta_info={"wow": 1, "other": [123]},
-                contact_phone=phonenumbers.parse("+18884156789"),
+                contact_phone=RhubarbPhoneNumber.from_string("+18884156789"),
                 contact_email="email@example.com",
                 public=True,
             ),
@@ -180,7 +180,7 @@ class Book(BaseUpdatedAtModel):
     meta_info: Optional[JSON] = column(sql_default=None)
     favorite_pages: list[int] = column(sql_default="'{}'")
     internal_bin_info: Optional[bytes] = column(sql_default=None)
-    contact_phone: Optional[PhoneNumber] = column(sql_default=False)
+    contact_phone: Optional[PhoneNumber] = column(sql_default=None)
     contact_email: Optional[Email] = column(sql_default=None)
     public: bool = column(sql_default=False)
 

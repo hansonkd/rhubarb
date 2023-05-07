@@ -1,3 +1,4 @@
+import asyncio
 import dataclasses
 from urllib.parse import urlparse
 
@@ -8,6 +9,7 @@ from .connection_base import AsyncConnectionWithStats
 
 
 pools = {}
+pool_lock = asyncio.Lock()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -23,15 +25,16 @@ class PostgresConfig:
     async def get_pool(self) -> AsyncConnectionPool:
         if self in pools:
             return pools[self]
-        kwargs = dataclasses.asdict(self)
-        min_size = kwargs.pop("min_size")
-        max_size = kwargs.pop("max_size")
-        pool = AsyncConnectionPool(
-            connection_class=AsyncConnectionWithStats, kwargs=kwargs, min_size=min_size, max_size=max_size
-        )
-        await pool.open(wait=True)
-        pools[self] = pool
-        return pool
+        async with pool_lock:
+            kwargs = dataclasses.asdict(self)
+            min_size = kwargs.pop("min_size")
+            max_size = kwargs.pop("max_size")
+            pool = AsyncConnectionPool(
+                connection_class=AsyncConnectionWithStats, kwargs=kwargs, min_size=min_size, max_size=max_size
+            )
+            await pool.open(wait=True, timeout=10)
+            pools[self] = pool
+            return pool
 
 
 DEFAULT_URI_ENV = "PG_DATABASE_URI"

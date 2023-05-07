@@ -8,10 +8,12 @@ from psycopg import AsyncConnection
 
 from rhubarb.contrib.postgres.connection import connection
 from rhubarb.config import _program_state, Config, PostgresConfig
+from rhubarb.contrib.redis.config import pools as redis_pools
+from rhubarb.contrib.postgres.config import pools as postgres_pools
 
 
-@pytest.fixture(scope="session")
-def rhubarb(config_override):
+@pytest_asyncio.fixture()
+async def rhubarb(config_override):
     with config_override(
         Config(
             postgres=PostgresConfig(
@@ -20,6 +22,14 @@ def rhubarb(config_override):
         )
     ):
         yield
+        for cache in redis_pools.values():
+            await cache.disconnect(inuse_connections=True)
+        redis_pools.clear()
+        for pg_pool in postgres_pools.values():
+            await pg_pool.close()
+        postgres_pools.clear()
+
+
 
 
 @pytest.fixture(scope="session")

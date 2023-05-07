@@ -43,12 +43,6 @@ class User(BaseUpdatedAtModel):
     is_staff: bool = column(sql_default=False)
     is_superuser: bool = column(sql_default=False)
 
-    def __post_init__(self):
-        if isinstance(self.password, bytes):
-            self.password = PasswordHash(self.password)
-        if isinstance(self.phone_number, str):
-            self.password = PhoneNumber(self.phone_number)
-
     def __constraints__(self: ModelSelector):
         return {
             "unique_username": Constraint(check=self.username, unique=True),

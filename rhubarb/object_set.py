@@ -380,7 +380,14 @@ class SimpleExtractor(Extractor[V]):
         super().__init__(model_reference, field)
 
     async def extract(self, row) -> V:
-        return row[self.alias]
+        v = row[self.alias]
+        if v is not None and self.field is not None:
+            type_ = self.field.type
+            if isinstance(type_, StrawberryOptional):
+                type_ = type_.of_type
+            if isinstance(type_, ScalarWrapper):
+                v = type_._scalar_definition.parse_value(v)
+        return v
 
 
 class WrappedExtractor(Extractor[V]):
@@ -1104,7 +1111,7 @@ class Desc(AscDesc):
 
 
 S = TypeVar("S", bound=Selector)
-R = TypeVar("R", bound=Selector)
+R = TypeVar("R", Selector, dataclasses.dataclass)
 OrderBySelector = TypeVar(
     "OrderBySelector",
     Selector,
@@ -1193,7 +1200,13 @@ class ObjectSet(Generic[T, S]):
 
     def select(self, selection: Callable[[S], R]) -> ObjectSet[T, R]:
         new_self = self.clone()
-        new_self.selection = selection(new_self.selection)
+        selection = selection(new_self.selection)
+        if dataclasses.is_dataclass(selection):
+            selection = DataclassSelector(
+                selection.__class__,
+                {f.name: getattr(selection, f.name) for f in dataclasses.fields(selection)}
+            )
+        new_self.selection = selection
 
         new_self.sync_joins(new_self.selection)
         return new_self

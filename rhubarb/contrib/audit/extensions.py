@@ -16,14 +16,17 @@ class AuditingExtension(SchemaExtension):
             kwargs["session_id"] = request.sessions.get("session_id")
             kwargs["ip"] = request.client.host
 
-        await log_gql_event(
-            conn=self.execution_context.context["conn"],
-            raw_query=self.execution_context.query,
-            variables=self.execution_context.variables,
-            operation_type=self.execution_context.operation_type,
-            event_name=self.execution_context.operation_name,
-            **kwargs,
-        )
+        try:
+            yield
+        finally:
+            await log_gql_event(
+                conn=self.execution_context.context.get("audit_conn"),
+                raw_query=self.execution_context.query,
+                variables=self.execution_context.variables,
+                operation_type=self.execution_context.operation_type,
+                event_name=self.execution_context.operation_name,
+                **kwargs,
+            )
 
 
 class TransactionalMutationExtension(SchemaExtension):
