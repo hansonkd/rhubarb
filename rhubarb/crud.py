@@ -153,13 +153,20 @@ async def find_or_create(
 
 def empty_pk(obj: T):
     pk = pk_concrete(obj)
-    return pk is None or isinstance(pk, Unset) or isinstance(obj, tuple) and all(p is None or isinstance(p, Unset) for p in pk)
+    return (
+        pk is None
+        or isinstance(pk, Unset)
+        or isinstance(obj, tuple)
+        and all(p is None or isinstance(p, Unset) for p in pk)
+    )
 
 
 def save(obj: T, conn: AsyncConnection, info: Info | None = None, insert_with_pk=False):
     model = obj.__class__
     if empty_pk(obj) or insert_with_pk:
-        return insert_objs(model, conn, [obj], skip_pks=not insert_with_pk, one=True, returning=True)
+        return insert_objs(
+            model, conn, [obj], skip_pks=not insert_with_pk, one=True, returning=True
+        )
 
     object_set = ObjectSet(model, conn=conn, info=info)
     model_reference = object_set.model_reference

@@ -21,7 +21,11 @@ class IsSuperUser(BasePermission):
     def has_permission(self, source: typing.Any, info: Info, **kwargs) -> bool:
         request: typing.Union[Request, WebSocket] = info.context["request"]
 
-        return hasattr(request, "user") and request.user.is_authenticated and request.user.is_staff
+        return (
+            hasattr(request, "user")
+            and request.user.is_authenticated
+            and request.user.is_staff
+        )
 
 
 class IsStaff(BasePermission):
@@ -30,4 +34,8 @@ class IsStaff(BasePermission):
     def has_permission(self, source: typing.Any, info: Info, **kwargs) -> bool:
         request: typing.Union[Request, WebSocket] = info.context["request"]
 
-        return hasattr(request, "user") and request.user.is_authenticated and request.user.is_superuser
+        return (
+            hasattr(request, "user")
+            and request.user.is_authenticated
+            and request.user.is_superuser
+        )

@@ -4,7 +4,14 @@ from psycopg.errors import UniqueViolation
 
 from rhubarb import Registry, table, save
 from rhubarb.contrib.users.config import UserConfig
-from rhubarb.contrib.users.models import User, set_password, set_email, user_registry, verify_email, register
+from rhubarb.contrib.users.models import (
+    User,
+    set_password,
+    set_email,
+    user_registry,
+    verify_email,
+    register,
+)
 from rhubarb.crud import reload
 from rhubarb.migrations.data import MigrationStateDatabase, CreateTable
 from rhubarb.migrations.utils import fast_forward, find_diffs, reset_db_and_fast_forward
@@ -25,6 +32,7 @@ EMPTY_STATE = MigrationStateDatabase()
 def user_config(patch_config):
     with patch_config(users=UserConfig(user_model=MyUser)):
         yield
+
 
 @pytest_asyncio.fixture
 async def user_table(postgres_connection, user_config):
@@ -78,7 +86,9 @@ async def test_verification_success(postgres_connection, user):
 @pytest.mark.asyncio
 async def test_verification_success_update_user(postgres_connection, user):
     verification = await set_email(postgres_connection, user, "e@example.com")
-    user = await verify_email(postgres_connection, verification.id, verification.code, update_user=True)
+    user = await verify_email(
+        postgres_connection, verification.id, verification.code, update_user=True
+    )
     assert user.email == "e@example.com"
 
 
@@ -92,7 +102,9 @@ async def test_register(postgres_connection, user_table):
 
 @pytest.mark.asyncio
 async def test_register_phone(postgres_connection, user_table):
-    result = await register(postgres_connection, username="123", phone_number="+18884151234")
+    result = await register(
+        postgres_connection, username="123", phone_number="+18884151234"
+    )
     assert result.user
     assert result.phone_verification
     assert not result.email_verification
@@ -100,7 +112,9 @@ async def test_register_phone(postgres_connection, user_table):
 
 @pytest.mark.asyncio
 async def test_register_email(postgres_connection, user_table):
-    result = await register(postgres_connection, username="123", email="user@example.com")
+    result = await register(
+        postgres_connection, username="123", email="user@example.com"
+    )
     assert result.user
     assert not result.phone_verification
     assert result.email_verification
@@ -108,7 +122,12 @@ async def test_register_email(postgres_connection, user_table):
 
 @pytest.mark.asyncio
 async def test_register_both(postgres_connection, user_table):
-    result = await register(postgres_connection, username="123", phone_number="+18884156789", email="user@example.com")
+    result = await register(
+        postgres_connection,
+        username="123",
+        phone_number="+18884156789",
+        email="user@example.com",
+    )
     assert result.user
     assert result.phone_verification
     assert result.email_verification

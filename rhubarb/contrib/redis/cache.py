@@ -14,7 +14,9 @@ ONE_HOUR_SECONDS = 60 * 60
 
 
 class RedisCacher(Generic[V]):
-    def __init__(self, ttl_seconds: int = ONE_HOUR_SECONDS, key_prefix: str = "_cache_"):
+    def __init__(
+        self, ttl_seconds: int = ONE_HOUR_SECONDS, key_prefix: str = "_cache_"
+    ):
         self.key_prefix = key_prefix
         self.ttl_seconds = ttl_seconds
 
@@ -42,8 +44,17 @@ class RedisCacher(Generic[V]):
 
 
 class LocalRedisCacher(RedisCacher):
-    def __init__(self, ttl_seconds: int = ONE_HOUR_SECONDS, key_prefix: str = "_cache_", local_cache: cachetools.Cache = None, local_only=False, max_size=1024):
-        self.local_cache = local_cache or cachetools.TTLCache(maxsize=max_size, ttl=ttl_seconds)
+    def __init__(
+        self,
+        ttl_seconds: int = ONE_HOUR_SECONDS,
+        key_prefix: str = "_cache_",
+        local_cache: cachetools.Cache = None,
+        local_only=False,
+        max_size=1024,
+    ):
+        self.local_cache = local_cache or cachetools.TTLCache(
+            maxsize=max_size, ttl=ttl_seconds
+        )
         self.local_only = local_only
         super().__init__(ttl_seconds=ttl_seconds, key_prefix=key_prefix)
 
@@ -69,9 +80,14 @@ class LocalRedisCacher(RedisCacher):
         return await super().clear_key(key)
 
 
-def cache(ttl_seconds: int = ONE_HOUR_SECONDS, prefix: str = None, key_arg: int | str = None, cacher_cls=RedisCacher, **kwargs):
+def cache(
+    ttl_seconds: int = ONE_HOUR_SECONDS,
+    prefix: str = None,
+    key_arg: int | str = None,
+    cacher_cls=RedisCacher,
+    **kwargs,
+):
     def decorator(f):
-
         if prefix is None:
             prefixed = f"{f.__name__}_"
         else:
@@ -91,7 +107,9 @@ def cache(ttl_seconds: int = ONE_HOUR_SECONDS, prefix: str = None, key_arg: int 
             elif isinstance(key_arg, str):
                 key = str(kwargs[key_arg])
             else:
-                raise RhubarbException(f"Invalid cache `key_arg` {key_arg}. Must be int or str.")
+                raise RhubarbException(
+                    f"Invalid cache `key_arg` {key_arg}. Must be int or str."
+                )
             return await cacher.for_key(key, default_fn)
 
         wrapper._cacher = cacher
@@ -101,7 +119,9 @@ def cache(ttl_seconds: int = ONE_HOUR_SECONDS, prefix: str = None, key_arg: int 
 
 
 local_cache = functools.partial(cache, cacher_cls=LocalRedisCacher)
-local_only_cache = functools.partial(cache, cacher_cls=LocalRedisCacher, local_only=True)
+local_only_cache = functools.partial(
+    cache, cacher_cls=LocalRedisCacher, local_only=True
+)
 
 
 async def clear_cache(f):
@@ -114,4 +134,3 @@ async def clear_cache_key(f, key: str):
     if cacher := getattr(f, "_cacher", None):
         return await cacher.clear_key(key)
     raise RhubarbException(f"Function {f} was not wrapped by cache")
-

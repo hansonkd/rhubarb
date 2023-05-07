@@ -6,7 +6,17 @@ from typing import Optional
 
 from strawberry.types.graphql import OperationType
 
-from rhubarb import BaseModel, column, table, Index, insert_objs, query, save, Registry, relation
+from rhubarb import (
+    BaseModel,
+    column,
+    table,
+    Index,
+    insert_objs,
+    query,
+    save,
+    Registry,
+    relation,
+)
 from rhubarb.config import config
 from rhubarb.contrib.redis.cache import local_cache, local_only_cache
 from rhubarb.core import SqlModel
@@ -44,6 +54,7 @@ class AuditEvent(BaseModel):
     resource_url: Optional[str] = column(sql_default=None)
     operation_type: Optional[str] = column(sql_default=None)
     event_name: Optional[str] = column(sql_default=None)
+    duration_ns: Optional[int] = column(sql_default=None)
 
     def __indexes__(self):
         return {
@@ -58,14 +69,17 @@ class AuditEvent(BaseModel):
 
 
 @local_only_cache(key_arg="hash_digest")
-async def do_get_or_create_gql_query(conn, raw_query: str, hash_digest: bytes = ...) -> GqlQuery:
+async def do_get_or_create_gql_query(
+    conn, raw_query: str, hash_digest: bytes = ...
+) -> GqlQuery:
     gql_query = await by_pk(GqlQuery, hash_digest, conn).one()
     if not gql_query:
         gql_query = await save(
-            GqlQuery(sha_hash=hash_digest, raw_query=raw_query), conn, insert_with_pk=True
+            GqlQuery(sha_hash=hash_digest, raw_query=raw_query),
+            conn,
+            insert_with_pk=True,
         ).execute()
     return gql_query
-
 
 
 async def get_or_create_gql_query(conn, raw_query: str) -> GqlQuery:
@@ -81,7 +95,9 @@ async def log_gql_event(raw_query: str, operation_type: OperationType, **kwargs)
         return await do_log_gql_event(conn, raw_query, operation_type, **kwargs)
 
 
-async def do_log_gql_event(conn, raw_query: str, operation_type: OperationType, **kwargs):
+async def do_log_gql_event(
+    conn, raw_query: str, operation_type: OperationType, **kwargs
+):
     conf = config()
 
     if operation_type == OperationType.MUTATION and not conf.audit.audit_mutations:

@@ -24,7 +24,8 @@ from typing import (
     Mapping,
     Union,
     TYPE_CHECKING,
-    Awaitable, NewType,
+    Awaitable,
+    NewType,
 )
 
 import phonenumbers
@@ -53,7 +54,7 @@ from rhubarb.core import (
     Binary,
     Serial,
     Email,
-    PhoneNumber
+    PhoneNumber,
 )
 from rhubarb.errors import RhubarbException
 from strawberry.field import StrawberryField
@@ -1204,14 +1205,19 @@ class ObjectSet(Generic[T, S]):
         if dataclasses.is_dataclass(selection):
             selection = DataclassSelector(
                 selection.__class__,
-                {f.name: getattr(selection, f.name) for f in dataclasses.fields(selection)}
+                {
+                    f.name: getattr(selection, f.name)
+                    for f in dataclasses.fields(selection)
+                },
             )
         new_self.selection = selection
 
         new_self.sync_joins(new_self.selection)
         return new_self
 
-    def update(self, set_fn: Callable[[ModelUpdater[T]], None] = None) -> UpdateSet[T, V]:
+    def update(
+        self, set_fn: Callable[[ModelUpdater[T]], None] = None
+    ) -> UpdateSet[T, V]:
         model_updater = ModelUpdater(self.model_selector)
         set_fn(model_updater)
         setters = model_updater._setters
@@ -1977,7 +1983,11 @@ def column(
 
     if (insert_default != UNSET) and default_factory == dataclasses.MISSING:
         default_factory = default_function_to_python(insert_default)
-    elif not virtual and default == dataclasses.MISSING and default_factory == dataclasses.MISSING:
+    elif (
+        not virtual
+        and default == dataclasses.MISSING
+        and default_factory == dataclasses.MISSING
+    ):
         default = UNSET
 
     type_annotation = StrawberryAnnotation.from_annotation(graphql_type)
@@ -2236,7 +2246,7 @@ def relation(
 
 
 def optimize_selection(selected_fields: SelectedFields, selection):
-    if isinstance(selection, ModelSelector):
+    if isinstance(selection, (DataclassSelector, ModelSelector)):
         selection = selection.__restrict__(selected_fields)
     elif isinstance(selection, WrappedSelector):
         selection._selector = optimize_selection(selected_fields, selection._selector)

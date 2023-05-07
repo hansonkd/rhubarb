@@ -30,8 +30,6 @@ async def rhubarb(config_override):
         postgres_pools.clear()
 
 
-
-
 @pytest.fixture(scope="session")
 def config_override() -> Callable[[Config], ContextManager]:
     @contextmanager

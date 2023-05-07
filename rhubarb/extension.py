@@ -1,10 +1,13 @@
 import inspect
 
 from graphql import GraphQLResolveInfo
+from psycopg import Rollback
 from strawberry.extensions import SchemaExtension
 from strawberry.field import StrawberryField
 from strawberry.types import Info
+from strawberry.types.graphql import OperationType
 
+from rhubarb.contrib.postgres.connection import connection
 from rhubarb.object_set import (
     pk_concrete,
     ObjectSet,
@@ -18,9 +21,14 @@ from rhubarb.object_set import (
 
 
 class RhubarbExtension(SchemaExtension):
-    def on_execute(self):
+    async def on_execute(self):
         self.execution_context.context["object_sets"] = {}
-        yield
+        if "conn" not in self.execution_context.context:
+            async with connection() as conn:
+                self.execution_context.context["conn"] = conn
+                yield
+        else:
+            yield
 
     async def resolve(self, _next, root, info: GraphQLResolveInfo, *args, **kwargs):
         prev_key = (
@@ -87,3 +95,15 @@ class RhubarbExtension(SchemaExtension):
                 return await result.resolve()
 
             return result
+
+
+class TransactionalMutationExtension(SchemaExtension):
+    async def on_execute(self):
+        if self.execution_context.operation_type == OperationType.MUTATION:
+            async with self.execution_context.context["conn"].transaction() as txn:
+                yield
+                result = self.execution_context.result
+                if result and result.errors:
+                    raise Rollback(txn)
+        else:
+            yield

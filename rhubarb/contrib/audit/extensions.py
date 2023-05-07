@@ -1,12 +1,17 @@
-from psycopg import Rollback
-from strawberry.extensions import SchemaExtension
-from strawberry.types.graphql import OperationType
+import time
 
+from strawberry.extensions import SchemaExtension
+
+from rhubarb.config import config
 from rhubarb.contrib.audit.models import log_gql_event
 
 
 class AuditingExtension(SchemaExtension):
     async def on_execute(self):
+        conn = None
+        if config().audit.reuse_conn_in_extension:
+            conn = self.execution_context.context.get("conn")
+
         kwargs = {}
         if user := self.execution_context.context.get("user"):
             kwargs["user_id"] = user.id
@@ -16,26 +21,18 @@ class AuditingExtension(SchemaExtension):
             kwargs["session_id"] = request.sessions.get("session_id")
             kwargs["ip"] = request.client.host
 
+        start = time.perf_counter_ns()
+
         try:
             yield
         finally:
+            end = time.perf_counter_ns()
             await log_gql_event(
-                conn=self.execution_context.context.get("audit_conn"),
+                conn=conn,
                 raw_query=self.execution_context.query,
                 variables=self.execution_context.variables,
                 operation_type=self.execution_context.operation_type,
                 event_name=self.execution_context.operation_name,
+                duration_ns=end - start,
                 **kwargs,
             )
-
-
-class TransactionalMutationExtension(SchemaExtension):
-    async def on_execute(self):
-        if self.execution_context.operation_type == OperationType.MUTATION:
-            async with self.execution_context.context["conn"].transaction() as txn:
-                yield
-                result = self.execution_context.result
-                if result and result.errors:
-                    raise Rollback(txn)
-        else:
-            yield

@@ -24,7 +24,9 @@ class RateLimit(AsyncContextDecorator):
             result = await pipeline.execute()
             times_hit = result[0]
             if times_hit > self.max_times:
-                raise RateLimitExceeded(f"Rate limit for {self.original_key} exceeded. {times_hit} > {self.max_times}")
+                raise RateLimitExceeded(
+                    f"Rate limit for {self.original_key} exceeded. {times_hit} > {self.max_times}"
+                )
         return self
 
     async def __aexit__(self, *exc):

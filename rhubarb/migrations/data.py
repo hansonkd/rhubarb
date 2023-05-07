@@ -127,9 +127,7 @@ def state_from_table(m: Type[T]):
     schema = m.__schema__
     name = m.__table__
     pks = ", ".join(pk)
-    constraints = {
-        f"{name}_pk": MigrationConstraint(check=f"{pks}", primary_key=True)
-    }
+    constraints = {f"{name}_pk": MigrationConstraint(check=f"{pks}", primary_key=True)}
     if hasattr(m, "__constraints__"):
         os = ObjectSet(m, None)
         additional_constraints = m.__constraints__(os.model_selector)

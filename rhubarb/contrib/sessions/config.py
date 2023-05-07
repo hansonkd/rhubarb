@@ -1,5 +1,6 @@
 import dataclasses
 
+from rhubarb.contrib.redis.config import RedisConfig, load_redis_config
 from rhubarb.env import str_env, int_env, bool_env
 
 
@@ -11,3 +12,6 @@ class SessionConfig:
     same_site: str = str_env("SESSION_SAME_SITE", "lax")
     https_only: str = bool_env("SESSION_HTTPS_ONLY", False)
     domain: str | None = str_env("SESSION_DOMAIN", None)
+    redis: RedisConfig = dataclasses.field(
+        default_factory=lambda: load_redis_config("REDIS_SESSIONS_URI")
+    )

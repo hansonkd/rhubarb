@@ -15,7 +15,7 @@ class PasswordHashers(Enum):
 class PasswordHash(object):
     def __init__(self, hash_: bytes):
         self.hash = hash_
-        split = self.hash.split(b'$')
+        split = self.hash.split(b"$")
         self.algo = PasswordHashers[split[0].decode().upper()]
         self.rounds = int(split[3].decode())
         self.real_hash = b"$".join(split[1:])
@@ -31,7 +31,7 @@ class PasswordHash(object):
         return False
 
     def __repr__(self):
-        return '<{}>'.format(type(self).__name__)
+        return "<{}>".format(type(self).__name__)
 
     def check(self, candidate: str):
         if self.algo == PasswordHashers.BCRYPT:
@@ -41,7 +41,7 @@ class PasswordHash(object):
     @classmethod
     def new(cls, password, algo=PasswordHashers.BCRYPT, rounds=12):
         if isinstance(password, str):
-            password = password.encode('utf8')
+            password = password.encode("utf8")
         # rounds = rounds or (datetime.date.today().year - 2000)
         if algo == PasswordHashers.BCRYPT:
             new_hash = bcrypt.hashpw(password, bcrypt.gensalt(rounds))

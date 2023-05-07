@@ -17,4 +17,3 @@ def default_user_factory():
 class UserConfig:
     verification_timeout: datetime.timedelta = datetime.timedelta(minutes=15)
     user_model: Type["User"] = dataclasses.field(default_factory=default_user_factory)
-

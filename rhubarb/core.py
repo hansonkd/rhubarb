@@ -169,7 +169,6 @@ class RhubarbPhoneNumber(phonenumbers.PhoneNumber):
         return hash(str(self))
 
 
-
 def parse_phone(v):
     v = str(v)
     phone_number_obj = phonenumbers.PhoneNumber()

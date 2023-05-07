@@ -16,7 +16,7 @@ from strawberry.types import Info
 
 from rhubarb.core import get_conn, Binary, PhoneNumber, Email, RhubarbPhoneNumber
 from rhubarb.crud import delete, save, insert_objs, update, query, by_pk
-from rhubarb.extension import RhubarbExtension
+from rhubarb.extension import RhubarbExtension, TransactionalMutationExtension
 from rhubarb.fixtures import *  # noqa
 from rhubarb.migrations.utils import reset_db_and_fast_forward
 from rhubarb.model import BaseUpdatedAtModel, BaseIntModel
@@ -45,11 +45,25 @@ from rhubarb.object_set import (
 from rhubarb.schema import ErrorRaisingSchema
 
 
+class DeleteException(Exception):
+    pass
+
+
 @pytest.fixture
 def schema():
     return ErrorRaisingSchema(
         query=Query,
         mutation=Mutation,
+        config=StrawberryConfig(auto_camel_case=False),
+    )
+
+
+@pytest.fixture
+def rollback_schema():
+    return ErrorRaisingSchema(
+        query=Query,
+        mutation=Mutation,
+        extensions=[TransactionalMutationExtension],
         config=StrawberryConfig(auto_camel_case=False),
     )
 
@@ -371,6 +385,20 @@ class Mutation:
             .delete()
             .execute()
         )
+
+    @strawberry.mutation
+    async def delete_book_raises(self, info: Info, book_id: uuid.UUID) -> uuid.UUID:
+        deleted_id = (
+            await by_pk(Book, book_id, get_conn(info), info=info)
+            .select(lambda x: x.id)
+            .delete()
+            .execute()
+        )
+
+        if deleted_id:
+            raise DeleteException(f"Whoops {deleted_id}")
+
+        return deleted_id
 
 
 @strawberry.type

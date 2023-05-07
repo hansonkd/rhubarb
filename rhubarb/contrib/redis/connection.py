@@ -6,7 +6,7 @@ from redis.asyncio import Redis
 
 @asynccontextmanager
 async def connection() -> Redis:
-    pool = await config().redis.get_pool()
+    pool = config().redis.get_pool()
     conn = Redis(connection_pool=pool)
     try:
         yield conn

@@ -3,6 +3,7 @@ from collections import defaultdict
 import pytest
 
 from rhubarb.contrib.postgres.connection_base import track_queries
+from tests.conftest import DeleteException
 
 
 @pytest.mark.asyncio
@@ -273,6 +274,7 @@ async def test_nested_insert_mutation_fail(schema, postgres_connection, basic_da
 async def test_delete(schema, postgres_connection, basic_data):
     conn = postgres_connection
 
+    starting_books = len(basic_data["books"])
     first_book = basic_data["books"][0]
 
     with track_queries() as tracker:
@@ -292,8 +294,35 @@ async def test_delete(schema, postgres_connection, basic_data):
     )
     assert res.errors is None
     assert res.data["all_books"]
-    assert len(res.data["all_books"]) == 3
+    assert len(res.data["all_books"]) == (starting_books - 1)
     assert str(first_book.id) not in [b["id"] for b in res.data["all_books"]]
+
+
+@pytest.mark.asyncio
+async def test_delete_rollback(rollback_schema, postgres_connection, basic_data):
+    conn = postgres_connection
+
+    starting_books = len(basic_data["books"])
+    first_book = basic_data["books"][0]
+
+    with track_queries() as tracker:
+        with pytest.raises(DeleteException):
+            await rollback_schema.execute(
+                "mutation Delete($book_id: UUID!) { delete_book_raises(book_id: $book_id) }",
+                context_value={"conn": conn},
+                variable_values={
+                    "book_id": str(first_book.id),
+                },
+            )
+        assert len(tracker.queries) == 1
+
+    res = await rollback_schema.execute(
+        "query { all_books { id }}", context_value={"conn": conn}
+    )
+    assert res.errors is None
+    assert res.data["all_books"]
+    assert len(res.data["all_books"]) == starting_books
+    assert str(first_book.id) in [b["id"] for b in res.data["all_books"]]
 
 
 @pytest.mark.asyncio

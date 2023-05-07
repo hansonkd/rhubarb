@@ -30,14 +30,17 @@ class PostgresConfig:
             min_size = kwargs.pop("min_size")
             max_size = kwargs.pop("max_size")
             pool = AsyncConnectionPool(
-                connection_class=AsyncConnectionWithStats, kwargs=kwargs, min_size=min_size, max_size=max_size
+                connection_class=AsyncConnectionWithStats,
+                kwargs=kwargs,
+                min_size=min_size,
+                max_size=max_size,
             )
             await pool.open(wait=True, timeout=10)
             pools[self] = pool
             return pool
 
 
-DEFAULT_URI_ENV = "PG_DATABASE_URI"
+DEFAULT_URI_ENV = "PG_URI"
 
 
 def load_postgres_config(extra_env_key=None):

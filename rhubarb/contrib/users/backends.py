@@ -1,7 +1,11 @@
 import datetime
 
 from psycopg import AsyncConnection
-from starlette.authentication import AuthenticationBackend, AuthenticationError, AuthCredentials
+from starlette.authentication import (
+    AuthenticationBackend,
+    AuthenticationError,
+    AuthCredentials,
+)
 from starlette.requests import HTTPConnection
 
 from rhubarb import save
@@ -19,9 +23,7 @@ class SessionAuthBackend(AuthenticationBackend):
                 raise AuthenticationError(f"User not found")
 
 
-async def login(
-    conn: AsyncConnection, user: User, request: HTTPConnection
-) -> User:
+async def login(conn: AsyncConnection, user: User, request: HTTPConnection) -> User:
     if not isinstance(user.id, Unset) and user.id:
         request.session["user_id"] = user.id
     user.last_login = datetime.datetime.utcnow()

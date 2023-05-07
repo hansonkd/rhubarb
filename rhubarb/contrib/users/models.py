@@ -7,6 +7,7 @@ import random
 from typing import Optional
 
 from psycopg import AsyncConnection
+from starlette.authentication import BaseUser
 
 from rhubarb import (
     PhoneNumber,
@@ -17,7 +18,9 @@ from rhubarb import (
     BaseModel,
     query,
     references,
-    save, Registry, table,
+    save,
+    Registry,
+    table,
 )
 from rhubarb.config import config
 from rhubarb.functions import is_null
@@ -29,11 +32,13 @@ user_registry = Registry(prefix="users_")
 
 
 @dataclasses.dataclass
-class User(BaseUpdatedAtModel):
+class User(BaseUser, BaseUpdatedAtModel):
     username: str = column()
     first_name: Optional[str] = column(sql_default=None)
     last_name: Optional[str] = column(sql_default=None)
-    password: Optional[Password] = column(sql_default=None, permission_classes=[IsSuperUser])
+    password: Optional[Password] = column(
+        sql_default=None, permission_classes=[IsSuperUser]
+    )
     email: Optional[Email] = column(sql_default=None)
     phone_number: Optional[PhoneNumber] = column(sql_default=None)
     activated: Optional[datetime.datetime] = column(sql_default=None)
@@ -49,6 +54,18 @@ class User(BaseUpdatedAtModel):
             "unique_phone_number": Constraint(check=self.phone_number, unique=True),
             "unique_email": Constraint(check=self.email, unique=True),
         }
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def display_name(self) -> str:
+        return self.username
+
+    @property
+    def identity(self) -> str:
+        return str(self.id)
 
 
 @dataclasses.dataclass
@@ -120,9 +137,7 @@ class RegistrationResult:
     email_verification: Optional[EmailVerification]
 
 
-async def register(
-    conn: AsyncConnection, **kwargs
-) -> RegistrationResult:
+async def register(conn: AsyncConnection, **kwargs) -> RegistrationResult:
     UserModel = config().users.user_model
     password = kwargs.pop("password", None)
     if isinstance(password, str):
@@ -137,8 +152,14 @@ async def register(
         email_verification = await set_email(conn, new_user, new_user.email)
 
     if new_user.phone_number:
-        phone_verification = await set_phone_number(conn, new_user, new_user.phone_number)
-    return RegistrationResult(user=new_user, email_verification=email_verification, phone_verification=phone_verification)
+        phone_verification = await set_phone_number(
+            conn, new_user, new_user.phone_number
+        )
+    return RegistrationResult(
+        user=new_user,
+        email_verification=email_verification,
+        phone_verification=phone_verification,
+    )
 
 
 async def set_email(
@@ -147,7 +168,9 @@ async def set_email(
     verif = EmailVerification(user_id=user.id, email=new_email)
     if mark_sent:
         verif.sent = datetime.datetime.utcnow()
-    await query(EmailVerification, conn).kw_where(user_id=user.id).kw_update(canceled=datetime.datetime.utcnow()).execute()
+    await query(EmailVerification, conn).kw_where(user_id=user.id).kw_update(
+        canceled=datetime.datetime.utcnow()
+    ).execute()
     return await save(verif, conn).execute()
 
 
@@ -204,9 +227,6 @@ async def verify_password_reset(
         return True
 
 
-async def set_password(
-    conn: AsyncConnection, user: User, new_password: str
-) -> User:
+async def set_password(conn: AsyncConnection, user: User, new_password: str) -> User:
     user.password = PasswordHash.new(new_password)
     return await save(user, conn).execute()
-
