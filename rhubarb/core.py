@@ -1,22 +1,17 @@
-import base64
 import datetime
 import decimal
 import inspect
 import re
 import time
 import uuid
-from enum import Enum
 from typing import TypeVar, Protocol, ClassVar, Literal, Union, NewType
 
 import phonenumbers
-import psycopg
 from psycopg import AsyncConnection
-from psycopg.abc import Dumper
 from strawberry import scalar
 from strawberry.scalars import JSON, Base16, Base32, Base64
 from strawberry.types import Info
 from strawberry.types.types import TypeDefinition
-from strawberry import scalars
 from rhubarb.errors import RhubarbException, RhubarbValidationError
 
 Elem = TypeVar("Elem")
@@ -67,53 +62,6 @@ Email = scalar(
     NewType("Email", str),
     serialize=lambda v: v,
     parse_value=parse_email,
-)
-
-
-import bcrypt
-
-
-class PasswordHashers(Enum):
-    BCRYPT = "bcrypt"
-
-
-class PasswordHash(object):
-    def __init__(self, hash_: bytes):
-        self.hash = hash_
-        split = self.hash.split(b'$')
-        self.algo = PasswordHashers[split[0].decode()]
-        self.rounds = int(split[3].decode())
-
-    def __eq__(self, candidate):
-        if isinstance(candidate, str):
-            candidate = candidate.encode()
-            return bcrypt.checkpw(candidate, self.hash)
-        return False
-
-    def __repr__(self):
-        return '<{}>'.format(type(self).__name__)
-
-    def check(self, candidate: str):
-        if self.algo == PasswordHashers.BCRYPT:
-            return bcrypt.checkpw(candidate.encode(), self.hash)
-        raise RhubarbException("Unknown algorithm")
-
-    @classmethod
-    def new(cls, password, algo=PasswordHashers.BCRYPT, rounds=None):
-        if isinstance(password, str):
-            password = password.encode('utf8')
-        rounds = rounds or (datetime.date.today().year - 2000)
-        if algo == PasswordHashers.BCRYPT:
-            new_hash = bcrypt.hashpw(password, bcrypt.gensalt(rounds))
-        else:
-            raise RhubarbException("Unknown algorithm")
-        return cls(new_hash)
-
-
-Password = scalar(
-    NewType("Password", bytes),
-    serialize=lambda v: v.hash,
-    parse_value=PasswordHash,
 )
 
 

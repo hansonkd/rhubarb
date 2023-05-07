@@ -65,6 +65,14 @@ def cast(o: Selector, t: SqlType):
     return Computed(args=[o, t], op="CAST", infixed=False, sep="AS")
 
 
+def is_null(o: Selector):
+    return Computed(args=[o], op="IS NULL", infixed=True)
+
+
+def is_not_null(o: Selector):
+    return Computed(args=[o], op="IS NOT NULL", infixed=True)
+
+
 def case(*whens: tuple[Selector[bool], Selector[V]], default: Selector[V] = None):
     return Case(list(whens), default=default)
 

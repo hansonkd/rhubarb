@@ -24,7 +24,7 @@ from typing import (
     Mapping,
     Union,
     TYPE_CHECKING,
-    Awaitable,
+    Awaitable, NewType,
 )
 
 import phonenumbers
@@ -33,6 +33,7 @@ from psycopg import Connection, AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from strawberry.annotation import StrawberryAnnotation
+from strawberry.custom_scalar import ScalarWrapper
 from strawberry.type import StrawberryOptional, StrawberryType, StrawberryList
 from strawberry.types import Info
 from strawberry.types.fields.resolver import StrawberryResolver
@@ -52,7 +53,7 @@ from rhubarb.core import (
     Binary,
     Serial,
     Email,
-    PhoneNumber, Password,
+    PhoneNumber
 )
 from rhubarb.errors import RhubarbException
 from strawberry.field import StrawberryField
@@ -105,27 +106,26 @@ class SqlType:
 
     @classmethod
     def from_string(cls, s: str, optional=False):
-        return cls(s)
+        return cls(s, optional=optional)
 
     @classmethod
-    def from_python(cls, t: StrawberryType | type):
+    def from_python(cls, t: Any):
         if hasattr(t, "__sql_type__"):
             return t.__sql_type__()
         elif t == JSON:
             return TYPE_JSON
-        elif t in (Password, Binary, Base64, Base32, Base16):
-            return TYPE_BYTEA
         elif t == Serial:
             return TYPE_SERIAL
-        elif t in (Email, PhoneNumber):
-            return TYPE_TEXT
+        elif isinstance(t, ScalarWrapper):
+            return cls.from_python(t.wrap)
         elif isinstance(t, StrawberryOptional):
             inner_type = cls.from_python(t.of_type)
             return dataclasses.replace(inner_type, optional=True)
         elif isinstance(t, StrawberryList):
             return TYPE_JSON
-        elif isinstance(t, phonenumbers.PhoneNumber):
-            return TYPE_TEXT
+        elif hasattr(t, "__supertype__"):
+            return cls.from_python(t.__supertype__)
+
         if inspect.isclass(t):
             if issubclass(t, bool):
                 return TYPE_BOOLEAN
@@ -145,8 +145,10 @@ class SqlType:
                 return TYPE_UUID
             elif issubclass(t, (dict, list)):
                 return TYPE_JSON
+            elif issubclass(t, phonenumbers.PhoneNumber):
+                return TYPE_TEXT
         raise RhubarbException(
-            f"InvalidSQL Type: {t} cannot be made into a valid SQLType"
+            f"InvalidSQL Type: {t} ({type(t)}) cannot be made into a valid SQLType"
         )
 
     def __repr__(self):
@@ -627,11 +629,17 @@ class Computed(Selector[V]):
 
     def __sql__(self, builder: SQLBuilder):
         if self._infixed:
-            builder.write(f"(")
-            builder.write_value(self._args[0])
-            builder.write(f" {self._op} ")
-            builder.write_value(self._args[1])
-            builder.write(f")")
+            if len(self._args) == 1:
+                builder.write(f"(")
+                builder.write_value(self._args[0])
+                builder.write(f" {self._op}")
+                builder.write(f")")
+            else:
+                builder.write(f"(")
+                builder.write_value(self._args[0])
+                builder.write(f" {self._op} ")
+                builder.write_value(self._args[1])
+                builder.write(f")")
         else:
             builder.write(f"{self._op}(")
             wrote_val = False
@@ -1190,9 +1198,25 @@ class ObjectSet(Generic[T, S]):
         new_self.sync_joins(new_self.selection)
         return new_self
 
-    def update(self, set_fn: Callable[[ModelUpdater[T]], None]) -> UpdateSet[T, V]:
+    def update(self, set_fn: Callable[[ModelUpdater[T]], None] = None) -> UpdateSet[T, V]:
         model_updater = ModelUpdater(self.model_selector)
         set_fn(model_updater)
+        setters = model_updater._setters
+
+        return UpdateSet(
+            model_reference=self.model_reference,
+            conn=self.conn,
+            where=self.where_clause,
+            one=self._one,
+            returning=self.selection,
+            setters=setters,
+        )
+
+    def kw_update(self, **kwargs) -> UpdateSet[T, V]:
+        model_updater = ModelUpdater(self.model_selector)
+        for k, v in kwargs.items():
+            setattr(model_updater, k, v)
+
         setters = model_updater._setters
 
         return UpdateSet(
@@ -1278,6 +1302,21 @@ class ObjectSet(Generic[T, S]):
     def where(self, where: Callable[[S], NewWhereSelector]) -> ObjectSet[T, S]:
         new_self = self.clone()
         new_self.where_clause = where(new_self.selection)
+        new_self.sync_joins(new_self.where_clause)
+
+        return new_self
+
+    def kw_where(self, **kwargs) -> ObjectSet[T, S]:
+        new_self = self.clone()
+        where_clause = new_self.where_clause
+        for k, v in kwargs.items():
+            new_clause = getattr(self.selection, k) == v
+            if where_clause is not None:
+                where_clause = where_clause and new_clause
+            else:
+                where_clause = new_clause
+
+        new_self.where_clause = where_clause
         new_self.sync_joins(new_self.where_clause)
 
         return new_self
@@ -1925,7 +1964,7 @@ def column(
 
     if (insert_default != UNSET) and default_factory == dataclasses.MISSING:
         default_factory = default_function_to_python(insert_default)
-    elif not virtual and default == dataclasses.MISSING:
+    elif not virtual and default == dataclasses.MISSING and default_factory == dataclasses.MISSING:
         default = UNSET
 
     type_annotation = StrawberryAnnotation.from_annotation(graphql_type)

@@ -1,3 +1,4 @@
+import dataclasses
 from contextlib import contextmanager
 from typing import ContextManager, Callable
 
@@ -27,6 +28,20 @@ def config_override() -> Callable[[Config], ContextManager]:
     def override_config(config: Config):
         old_config = _program_state.config
         _program_state.config = config
+        try:
+            yield
+        finally:
+            _program_state.config = old_config
+
+    return override_config
+
+
+@pytest.fixture(scope="session")
+def patch_config() -> Callable[[...], ContextManager]:
+    @contextmanager
+    def override_config(**kwargs):
+        old_config = _program_state.config
+        _program_state.config = dataclasses.replace(old_config, **kwargs)
         try:
             yield
         finally:

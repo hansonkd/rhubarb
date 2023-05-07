@@ -4,10 +4,10 @@ import typing
 from typing import Type
 
 if typing.TYPE_CHECKING:
-    from .models import User
+    from .models import User, PhoneVerification
 
 
-def default_model_factory():
+def default_user_factory():
     from .models import User
 
     return User
@@ -15,6 +15,6 @@ def default_model_factory():
 
 @dataclasses.dataclass(frozen=True)
 class UserConfig:
-    user_model: Type["User"] = dataclasses.field(default_factory=default_model_factory)
-    num_sms_verification_digits: int = 6
     verification_timeout: datetime.timedelta = datetime.timedelta(minutes=15)
+    user_model: Type["User"] = dataclasses.field(default_factory=default_user_factory)
+

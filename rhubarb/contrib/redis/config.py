@@ -33,7 +33,7 @@ class RedisConfig:
 DEFAULT_URI_ENV = "REDIS_URI"
 
 
-def load_redis_config(extra_env_key=None):
+def load_redis_config(extra_env_key: str=None):
     if db_url := (extra_env_key and str_env(extra_env_key)) or str_env(DEFAULT_URI_ENV):
         result = urlparse(db_url)
         username = result.username

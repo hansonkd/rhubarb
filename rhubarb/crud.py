@@ -35,6 +35,12 @@ def query(
     return ObjectSet(m, conn=conn, info=info)
 
 
+def reload(
+    m: T, conn: AsyncConnection, info: Info = None
+) -> ObjectSet[T, ModelSelector[T]]:
+    return by_pk(m.__class__, pk_concrete(m), conn, info)
+
+
 def by_pk(
     m: Type[T],
     pk: SQLValue | tuple[SQLValue, ...],
@@ -147,13 +153,13 @@ async def find_or_create(
 
 def empty_pk(obj: T):
     pk = pk_concrete(obj)
-    return pk is None or isinstance(obj, tuple) and all(p is None for p in pk)
+    return pk is None or isinstance(pk, Unset) or isinstance(obj, tuple) and all(p is None or isinstance(p, Unset) for p in pk)
 
 
 def save(obj: T, conn: AsyncConnection, info: Info | None = None):
     model = obj.__class__
     if empty_pk(obj):
-        return insert_objs(model, conn, [obj], one=True)
+        return insert_objs(model, conn, [obj], one=True, returning=True)
 
     object_set = ObjectSet(model, conn=conn, info=info)
     model_reference = object_set.model_reference

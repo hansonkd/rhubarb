@@ -128,7 +128,7 @@ def state_from_table(m: Type[T]):
     name = m.__table__
     pks = ", ".join(pk)
     constraints = {
-        f"{name}_pk": MigrationConstraint(check=f"({pks})", primary_key=True)
+        f"{name}_pk": MigrationConstraint(check=f"{pks}", primary_key=True)
     }
     if hasattr(m, "__constraints__"):
         os = ObjectSet(m, None)
@@ -307,7 +307,7 @@ class AddConstraint:
 
     def __sql__(self, builder: SQLBuilder):
         builder.write(
-            f"ADD CONSTRAINT {self.constraint_name} {self.constraint.modifier} {self.constraint.check}"
+            f"ADD CONSTRAINT {self.constraint_name} {self.constraint.modifier} ({self.constraint.check})"
         )
 
     def alter(self, table: MigrationStateTable):
@@ -545,7 +545,7 @@ class CreateTable(MigrationOperation):
                 builder.write(", ")
             wrote_val = True
             builder.write(
-                f"CONSTRAINT {constraint_name} {constraint.modifier} {constraint.check}"
+                f"CONSTRAINT {constraint_name} {constraint.modifier} ({constraint.check})"
             )
 
         builder.write(f")")

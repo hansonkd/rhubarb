@@ -11,7 +11,9 @@ from psycopg.pq import Format
 from psycopg.rows import Row
 import time
 
-from psycopg.types.string import StrBinaryDumper
+from psycopg.types.string import StrBinaryDumper, BytesBinaryDumper
+
+from rhubarb.password import PasswordHash
 
 
 class QueryListener(Protocol):
@@ -71,6 +73,7 @@ class AsyncConnectionWithStats(AsyncConnection):
         super().__init__(*args, **kwargs)
         self.cursor_factory = AsyncCursorWithStats
         self.adapters.register_dumper(phonenumbers.PhoneNumber, PhoneNumberDumper)
+        self.adapters.register_dumper(PasswordHash, PasswordHashDumper)
 
 
 class AsyncCursorWithStats(AsyncCursor):
@@ -95,3 +98,8 @@ class PhoneNumberDumper(StrBinaryDumper):
 
     def dump(self, obj):
         return super().dump(str(obj))
+
+
+class PasswordHashDumper(BytesBinaryDumper):
+    def dump(self, obj: PasswordHash):
+        return super().dump(obj.hash)
