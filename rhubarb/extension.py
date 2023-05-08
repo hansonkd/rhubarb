@@ -7,7 +7,7 @@ from strawberry.field import StrawberryField
 from strawberry.types import Info
 from strawberry.types.graphql import OperationType
 
-from rhubarb.contrib.postgres.connection import connection
+from rhubarb.contrib.postgres.connection import connection, override_conn
 from rhubarb.object_set import (
     pk_concrete,
     ObjectSet,
@@ -100,10 +100,21 @@ class RhubarbExtension(SchemaExtension):
 class TransactionalMutationExtension(SchemaExtension):
     async def on_execute(self):
         if self.execution_context.operation_type == OperationType.MUTATION:
-            async with self.execution_context.context["conn"].transaction() as txn:
-                yield
-                result = self.execution_context.result
-                if result and result.errors:
-                    raise Rollback(txn)
+            async with connection() as conn:
+                self.execution_context.context["conn"] = conn
+                async with conn.transaction() as txn:
+                    yield
+                    result = self.execution_context.result
+                    if result and result.errors:
+                        raise Rollback(txn)
         else:
+            yield
+
+
+class TestingExtension(SchemaExtension):
+    def __init__(self, *, execution_context, conn=None):
+        self.conn = conn
+        super().__init__(execution_context=execution_context)
+    async def on_execute(self):
+        with override_conn(self.conn):
             yield

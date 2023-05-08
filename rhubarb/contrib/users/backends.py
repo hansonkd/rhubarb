@@ -8,9 +8,9 @@ from starlette.authentication import (
 )
 from starlette.requests import HTTPConnection
 
-from rhubarb import save
+from rhubarb import save, RhubarbException
 from rhubarb.contrib.postgres.connection import connection
-from rhubarb.contrib.users.models import get_user, User
+from rhubarb.contrib.users.models import get_user, User, U
 from rhubarb.core import Unset
 
 
@@ -23,8 +23,10 @@ class SessionAuthBackend(AuthenticationBackend):
                 raise AuthenticationError(f"User not found")
 
 
-async def login(conn: AsyncConnection, user: User, request: HTTPConnection) -> User:
+async def login(conn: AsyncConnection, user: U, request: HTTPConnection) -> U:
     if not isinstance(user.id, Unset) and user.id:
         request.session["user_id"] = user.id
+    else:
+        raise RhubarbException(f"Cannot login {user} because it doesn't have an id")
     user.last_login = datetime.datetime.utcnow()
     return await save(user, conn).execute()

@@ -45,7 +45,7 @@ def config_override() -> Callable[[Config], ContextManager]:
 
 
 @pytest.fixture(scope="session")
-def patch_config() -> Callable[[...], ContextManager]:
+def patch_config() -> Callable[..., ContextManager]:
     @contextmanager
     def override_config(**kwargs):
         old_config = _program_state.config

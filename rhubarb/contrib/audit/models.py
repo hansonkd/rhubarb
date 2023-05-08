@@ -4,6 +4,7 @@ import datetime
 from contextlib import asynccontextmanager
 from typing import Optional
 
+from starlette.requests import HTTPConnection
 from strawberry.types.graphql import OperationType
 
 from rhubarb import (
@@ -11,24 +12,27 @@ from rhubarb import (
     column,
     table,
     Index,
-    insert_objs,
-    query,
     save,
     Registry,
     relation,
 )
 from rhubarb.config import config
-from rhubarb.contrib.redis.cache import local_cache, local_only_cache
+from rhubarb.contrib.postgres.connection import connection
+from rhubarb.contrib.redis.cache import local_only_cache
 from rhubarb.core import SqlModel
 from rhubarb.crud import by_pk
-from rhubarb.local_cache import get_or_set_cache
 
 
 @asynccontextmanager
 async def audit_connection(timeout=30):
-    pool = await config().audit.postgres.get_pool()
-    async with pool.connection(timeout=timeout) as conn:
-        yield conn
+    conf = config()
+    if conf.audit.reuse_conn:
+        async with connection() as conn:
+            yield conn
+    else:
+        pool = await config().audit.postgres.get_pool()
+        async with pool.connection(timeout=timeout) as conn:
+            yield conn
 
 
 audit_registry = Registry(prefix="auditing_")
@@ -44,7 +48,7 @@ class GqlQuery(SqlModel):
 @table(registry=audit_registry)
 class AuditEvent(BaseModel):
     timestamp: datetime.datetime = column(sql_default="now()")
-    gql_query_sha_hash: bytes = column(sql_default=None)
+    gql_query_sha_hash: Optional[bytes] = column(sql_default=None)
     variables: Optional[dict] = column(sql_default=None)
     meta: Optional[dict] = column(sql_default=None)
     ip: Optional[str] = column(sql_default=None)
@@ -70,7 +74,7 @@ class AuditEvent(BaseModel):
 
 @local_only_cache(key_arg="hash_digest")
 async def do_get_or_create_gql_query(
-    conn, raw_query: str, hash_digest: bytes = ...
+        conn, raw_query: str, hash_digest: bytes = ...
 ) -> GqlQuery:
     gql_query = await by_pk(GqlQuery, hash_digest, conn).one()
     if not gql_query:
@@ -96,7 +100,7 @@ async def log_gql_event(raw_query: str, operation_type: OperationType, **kwargs)
 
 
 async def do_log_gql_event(
-    conn, raw_query: str, operation_type: OperationType, **kwargs
+        conn, raw_query: str, operation_type: OperationType, **kwargs
 ):
     conf = config()
 
@@ -105,8 +109,8 @@ async def do_log_gql_event(
     elif operation_type == OperationType.QUERY and not conf.audit.audit_queries:
         return
     elif (
-        operation_type == OperationType.SUBSCRIPTION
-        and not conf.audit.audit_subscriptions
+            operation_type == OperationType.SUBSCRIPTION
+            and not conf.audit.audit_subscriptions
     ):
         return
     gql_query = await get_or_create_gql_query(conn, raw_query)
@@ -114,5 +118,11 @@ async def do_log_gql_event(
     await log_event(conn, **kwargs)
 
 
-async def log_event(conn, **kwargs):
-    await insert_objs(AuditEvent, conn, [AuditEvent(**kwargs)], one=True).execute()
+async def log_event(conn, request: HTTPConnection = None, **kwargs):
+    if request:
+        kwargs.setdefault("resource_url", str(request.url))
+        kwargs.setdefault("ip", request.client.host)
+        kwargs.setdefault("user_id", request.user.id if request.user.is_authenticated else None)
+        kwargs.setdefault("impersonator_id", request.session.get("impersonator_id", None))
+        kwargs.setdefault("session_id", request.scope.get("__session_key", None))
+    await save(AuditEvent(**kwargs), conn).execute()

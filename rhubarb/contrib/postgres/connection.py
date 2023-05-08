@@ -20,9 +20,7 @@ def override_conn(conn: AsyncConnection):
 
 @asynccontextmanager
 async def connection(timeout: float | None = None):
-    print(f"Using", conn_override, conn_override.get())
     if conn := conn_override.get(None):
-        print(f"Using", {conn})
         yield conn
         return
     pool = await config().postgres.get_pool()

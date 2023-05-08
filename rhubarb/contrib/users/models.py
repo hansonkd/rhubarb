@@ -4,7 +4,7 @@ import secrets
 import string
 import uuid
 import random
-from typing import Optional
+from typing import Optional, TypeVar, Type
 
 from psycopg import AsyncConnection
 from starlette.authentication import BaseUser
@@ -68,6 +68,9 @@ class User(BaseUser, BaseUpdatedAtModel):
         return str(self.id)
 
 
+U = TypeVar("U", bound=User)
+
+
 @dataclasses.dataclass
 class VerificationMixin(BaseModel):
     sent: Optional[datetime.datetime] = column(sql_default=None)
@@ -103,13 +106,18 @@ class ResetPasswordVerification(VerificationMixin):
     code: str = column(default_factory=random_token)
 
 
-async def get_user(conn, user_id):
+async def get_user(conn, user_id) -> U:
     UserModel = config().users.user_model
 
     return await query(UserModel, conn).where(lambda x: x.id == user_id).one()
 
 
-async def get_and_complete_verification(cls, conn, verification_id, code):
+Verif = TypeVar("Verif", bound=VerificationMixin)
+
+
+async def get_and_complete_verification(
+    cls: Type[Verif], conn, verification_id, code
+) -> Verif:
     time_delta = config().users.verification_timeout
     last_valid_time = datetime.datetime.utcnow() - time_delta
 
@@ -194,7 +202,7 @@ async def reset_password(
 
 async def verify_email(
     conn: AsyncConnection, verification_id: uuid.UUID, code: str, update_user=False
-) -> Optional[User]:
+) -> Optional[U]:
     if verification := await get_and_complete_verification(
         EmailVerification, conn, verification_id, code
     ):
@@ -207,7 +215,7 @@ async def verify_email(
 
 async def verify_phone(
     conn: AsyncConnection, verification_id: uuid.UUID, code: str, update_user=False
-) -> Optional[User]:
+) -> Optional[U]:
     if verification := await get_and_complete_verification(
         EmailVerification, conn, verification_id, code
     ):
@@ -227,6 +235,6 @@ async def verify_password_reset(
         return True
 
 
-async def set_password(conn: AsyncConnection, user: User, new_password: str) -> User:
+async def set_password(conn: AsyncConnection, user: User, new_password: str) -> U:
     user.password = PasswordHash.new(new_password)
     return await save(user, conn).execute()

@@ -8,7 +8,7 @@ class AuditConfig:
     audit_mutations: bool = True
     audit_queries: bool = False
     audit_subscriptions: bool = False
-    reuse_conn_in_extension: bool = False
+    reuse_conn: bool = False
     postgres: PostgresConfig = dataclasses.field(
         default_factory=lambda: load_postgres_config("PG_AUDIT_URI")
     )

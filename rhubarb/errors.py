@@ -4,3 +4,7 @@ class RhubarbException(Exception):
 
 class RhubarbValidationError(RhubarbException):
     pass
+
+
+class PermissionDenied(RhubarbException):
+    pass

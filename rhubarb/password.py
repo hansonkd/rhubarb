@@ -17,8 +17,8 @@ class PasswordHash(object):
         self.hash = hash_
         split = self.hash.split(b"$")
         self.algo = PasswordHashers[split[0].decode().upper()]
-        self.rounds = int(split[3].decode())
-        self.real_hash = b"$".join(split[1:])
+        self.rounds = int(split[2].decode())
+        self.real_hash = b"$" + b"$".join(split[1:])
 
     @staticmethod
     def __sql_type__():
@@ -47,7 +47,7 @@ class PasswordHash(object):
             new_hash = bcrypt.hashpw(password, bcrypt.gensalt(rounds))
         else:
             raise RhubarbException("Unknown algorithm")
-        return cls(algo.value.encode() + b"$" + new_hash)
+        return cls(algo.value.encode() + new_hash)
 
 
 Password = scalar(
