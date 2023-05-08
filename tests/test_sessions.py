@@ -22,7 +22,11 @@ from strawberry.asgi import GraphQL
 
 from rhubarb.contrib.users.backends import login
 from rhubarb.contrib.users.config import UserConfig
-from rhubarb.contrib.users.impersonate import impersonate, stop_impersonating, ImpersonateEvent
+from rhubarb.contrib.users.impersonate import (
+    impersonate,
+    stop_impersonating,
+    ImpersonateEvent,
+)
 from rhubarb.contrib.users.middleware import (
     SessionAuthenticationMiddleware,
 )
@@ -96,7 +100,10 @@ async def user(postgres_connection, user_table) -> MyUser:
 
 @pytest_asyncio.fixture
 async def superuser(postgres_connection, user_table) -> MyUser:
-    yield await save(MyUser(username="admin@example.com", is_staff=True, is_superuser=True), postgres_connection).execute()
+    yield await save(
+        MyUser(username="admin@example.com", is_staff=True, is_superuser=True),
+        postgres_connection,
+    ).execute()
 
 
 class OverrideMiddleware:
@@ -114,7 +121,10 @@ async def async_http_client(postgres_connection) -> AsyncClient:
     schema = ErrorRaisingSchema(
         query=Query,
         mutation=Mutation,
-        extensions=[functools.partial(TestingExtension, conn=postgres_connection), AuditingExtension],
+        extensions=[
+            functools.partial(TestingExtension, conn=postgres_connection),
+            AuditingExtension,
+        ],
         config=StrawberryConfig(auto_camel_case=False),
     )
 
@@ -167,7 +177,9 @@ async def test_current_user_logged_in(async_http_client: AsyncClient, user):
 
 
 @pytest.mark.asyncio
-async def test_current_user_impersonate(postgres_connection, async_http_client: AsyncClient, user_config, user, superuser):
+async def test_current_user_impersonate(
+    postgres_connection, async_http_client: AsyncClient, user_config, user, superuser
+):
     res = await async_http_client.post(
         "/graphql/",
         json={
@@ -235,7 +247,6 @@ async def test_current_user_impersonate(postgres_connection, async_http_client: 
     assert events[-1].event_name == "OtherMutation"
     assert events[-1].user_id == user.id
     assert events[-1].impersonator_id == superuser.id
-
 
     # Stop impersonate
     res = await async_http_client.post(

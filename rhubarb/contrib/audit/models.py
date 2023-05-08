@@ -74,7 +74,7 @@ class AuditEvent(BaseModel):
 
 @local_only_cache(key_arg="hash_digest")
 async def do_get_or_create_gql_query(
-        conn, raw_query: str, hash_digest: bytes = ...
+    conn, raw_query: str, hash_digest: bytes = ...
 ) -> GqlQuery:
     gql_query = await by_pk(GqlQuery, hash_digest, conn).one()
     if not gql_query:
@@ -100,7 +100,7 @@ async def log_gql_event(raw_query: str, operation_type: OperationType, **kwargs)
 
 
 async def do_log_gql_event(
-        conn, raw_query: str, operation_type: OperationType, **kwargs
+    conn, raw_query: str, operation_type: OperationType, **kwargs
 ):
     conf = config()
 
@@ -109,8 +109,8 @@ async def do_log_gql_event(
     elif operation_type == OperationType.QUERY and not conf.audit.audit_queries:
         return
     elif (
-            operation_type == OperationType.SUBSCRIPTION
-            and not conf.audit.audit_subscriptions
+        operation_type == OperationType.SUBSCRIPTION
+        and not conf.audit.audit_subscriptions
     ):
         return
     gql_query = await get_or_create_gql_query(conn, raw_query)
@@ -122,7 +122,11 @@ async def log_event(conn, request: HTTPConnection = None, **kwargs):
     if request:
         kwargs.setdefault("resource_url", str(request.url))
         kwargs.setdefault("ip", request.client.host)
-        kwargs.setdefault("user_id", request.user.id if request.user.is_authenticated else None)
-        kwargs.setdefault("impersonator_id", request.session.get("impersonator_id", None))
+        kwargs.setdefault(
+            "user_id", request.user.id if request.user.is_authenticated else None
+        )
+        kwargs.setdefault(
+            "impersonator_id", request.session.get("impersonator_id", None)
+        )
         kwargs.setdefault("session_id", request.scope.get("__session_key", None))
     await save(AuditEvent(**kwargs), conn).execute()

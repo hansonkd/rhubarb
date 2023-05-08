@@ -115,6 +115,7 @@ class TestingExtension(SchemaExtension):
     def __init__(self, *, execution_context, conn=None):
         self.conn = conn
         super().__init__(execution_context=execution_context)
+
     async def on_execute(self):
         with override_conn(self.conn):
             yield
