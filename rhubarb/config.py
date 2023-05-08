@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from cachetools import TTLCache, Cache
+from rhubarb.contrib.cors.config import CorsConfig
 
 from rhubarb.contrib.email.config import EmailConfig
 from rhubarb.contrib.postgres.config import PostgresConfig, load_postgres_config
@@ -12,7 +13,8 @@ from rhubarb.contrib.redis.config import RedisConfig, load_redis_config
 from rhubarb.contrib.users.config import UserConfig
 from rhubarb.contrib.sessions.config import SessionConfig
 from rhubarb.contrib.audit.config import AuditConfig
-from rhubarb.env import str_env, int_env
+from rhubarb.contrib.webauthn.config import WebAuthnConfig
+from rhubarb.env import str_env, int_env, list_str_env
 from rhubarb.errors import RhubarbException
 from rhubarb.object_set import Registry, DEFAULT_REGISTRY
 
@@ -46,11 +48,13 @@ def init_rhubarb():
 class Config:
     migration_directory: Path = Path("./migrations")
     registry: Registry = dataclasses.field(default_factory=lambda: DEFAULT_REGISTRY)
+    cors: CorsConfig = dataclasses.field(default_factory=CorsConfig)
     postgres: PostgresConfig = dataclasses.field(default_factory=load_postgres_config)
     redis: RedisConfig = dataclasses.field(default_factory=load_redis_config)
     users: UserConfig = dataclasses.field(default_factory=UserConfig)
     audit: AuditConfig = dataclasses.field(default_factory=AuditConfig)
     sessions: SessionConfig = dataclasses.field(default_factory=SessionConfig)
+    webauthn: WebAuthnConfig = dataclasses.field(default_factory=WebAuthnConfig)
     localcache: Cache = dataclasses.field(
         default_factory=lambda: TTLCache(maxsize=1024, ttl=600)
     )

@@ -1,6 +1,12 @@
 import os
 
 
+def list_str_env(key: str, default=None) -> list[str] | None:
+    if val := os.getenv(key, default):
+        return [v.strip() for v in val.split(",")]
+    return default
+
+
 def str_env(key: str, default=None) -> str | None:
     return os.getenv(key, default)
 

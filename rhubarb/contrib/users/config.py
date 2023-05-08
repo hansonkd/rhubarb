@@ -3,6 +3,13 @@ import datetime
 import typing
 from typing import Type
 
+from webauthn.helpers.structs import (
+    AuthenticatorSelectionCriteria,
+    ResidentKeyRequirement,
+    UserVerificationRequirement,
+    AuthenticatorAttachment,
+)
+
 if typing.TYPE_CHECKING:
     from .models import User
 
