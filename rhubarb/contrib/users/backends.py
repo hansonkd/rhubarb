@@ -10,7 +10,7 @@ from starlette.requests import HTTPConnection
 
 from rhubarb import save, RhubarbException
 from rhubarb.contrib.postgres.connection import connection
-from rhubarb.contrib.users.models import get_user, User, U
+from rhubarb.contrib.users.models import get_user, U
 from rhubarb.core import Unset
 
 

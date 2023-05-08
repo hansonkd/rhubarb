@@ -100,8 +100,16 @@ class RhubarbExtension(SchemaExtension):
 class TransactionalMutationExtension(SchemaExtension):
     async def on_execute(self):
         if self.execution_context.operation_type == OperationType.MUTATION:
-            async with connection() as conn:
-                self.execution_context.context["conn"] = conn
+            if "conn" not in self.execution_context.context:
+                async with connection() as conn:
+                    self.execution_context.context["conn"] = conn
+                    async with conn.transaction() as txn:
+                        yield
+                        result = self.execution_context.result
+                        if result and result.errors:
+                            raise Rollback(txn)
+            else:
+                conn = self.execution_context.context["conn"]
                 async with conn.transaction() as txn:
                     yield
                     result = self.execution_context.result

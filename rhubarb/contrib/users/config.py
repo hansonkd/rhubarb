@@ -4,7 +4,7 @@ import typing
 from typing import Type
 
 if typing.TYPE_CHECKING:
-    from .models import User, PhoneVerification
+    from .models import User
 
 
 def default_user_factory():

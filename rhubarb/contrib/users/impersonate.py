@@ -20,10 +20,10 @@ IMPERSONATOR_SESSION_KEY = "impersonator_id"
 
 async def impersonate(user: U, request: HTTPConnection) -> bool:
     if not request.user.is_authenticated or not request.user.is_superuser:
-        raise PermissionDenied(f"Current user {request.user} cannot impersonate.")
+        raise PermissionDenied(f"Current user {request.user} cannot impersonate")
 
     if user.is_superuser:
-        raise PermissionDenied(f"Cannot impersonate superuser {request.user}.")
+        raise PermissionDenied(f"Cannot impersonate superuser {request.user}")
 
     if not isinstance(user.id, Unset) and user.id:
         request.session["user_id"] = user.id
@@ -50,7 +50,9 @@ async def impersonate(user: U, request: HTTPConnection) -> bool:
 async def stop_impersonating(conn: AsyncConnection, request: HTTPConnection) -> bool:
     if impersonate_id := request.session.get(IMPERSONATOR_SESSION_KEY, None):
         user = await get_user(conn, impersonate_id)
+        old_user = request.user
         request.session["user_id"] = user.id
+        request.scope["user"] = user
         del request.session[IMPERSONATOR_SESSION_KEY]
         async with audit_connection() as audit_conn:
             await log_event(
@@ -58,9 +60,9 @@ async def stop_impersonating(conn: AsyncConnection, request: HTTPConnection) -> 
                 request=request,
                 event_name=ImpersonateEvent.STOP_IMPERSONATING,
                 variables={
-                    "impersonator": {
-                        "id": user.identity,
-                        "username": user.display_name,
+                    "target": {
+                        "id": old_user.identity,
+                        "username": old_user.display_name,
                     }
                 },
             )
