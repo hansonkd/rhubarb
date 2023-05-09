@@ -672,15 +672,40 @@ With RunPython, you get a snapshot of table instances with only concrete fields 
 
 ```python
 from rhubarb import migrations
-from rhubarb import query, save
+from rhubarb import query, save, table, virtual_column, relation
 
 
 async def mig_fn(info: migrations.MigrationInfo):
     RatingModel = info.get_model("ratingmodel")
+    ReviewerModel = info.get_model("reviewermodel")
+    
+    # manually iterate, or just use normal CRUD functions...
     objs = await query(info.conn, RatingModel).as_list()
     for obj in objs:
         obj.rating += 10
         await save(info.conn, obj)
+        
+    # or create virtual models and use their fields...
+    # Because they are defined inside the migration, they are safe from changes in the app.
+    @table(skip_registry=True)
+    class MigRatingModel(RatingModel):
+        @virtual_column
+        def inflated(self) -> int:
+            return self.rating + 10
+        
+        @relation
+        def reviewer(self, reviewer: ReviewerModel):
+            return self.reviewer_id == reviewer
+
+    # Do an update using the fields and relations
+    def set_fn(m):
+        m.rating = m.inflated()
+    
+    def where_fn(m):
+        return m.reviewer().email == "some@example.com"
+        
+    await query(info.conn, MigRatingModel).where(where_fn).update(set_fn).execute()
+    
 
 
 def migrate():
