@@ -435,11 +435,18 @@ by_pk(conn, Person, "4fdd6a2d-ff49-41b6-b92a-dc05beb67298")
 
 # Updating
 by_kw(conn, Person, username="my_username").kw_update(email="new_email@example.com")
-query(conn, Person).kw_update(email="some@example.com")
+query(conn, Person).kw_update(email="some@example.com", active=True)
+save(conn, exising_person)
 # Update with a function, lets you use fields.
 def set_fn(person):
     person.email = person.verification().email
-query(conn, Person).update(set_fn)
+    person.active = True
+
+def where_fn(person):
+    return is_not_null(person.verification().completed)
+
+query(conn, Person).where(where_fn).update(set_fn)
+update(conn, Person, set_fn, where_fn)
 
 
 # Deleting
@@ -798,7 +805,7 @@ app = Starlette(
 
 Rhubarb comes with built-in Auditing extension that can record all queries, subscriptions, and mutations.
 
-By default, the auditing extension will use a new connection to the database different from the current executing connection of the schema. This is to prevent Transaction rollbacks from rolling back auditing events. It also allows you to specify an alternative auditing datbase (like TimeseriesDB) to silo your events.
+By default, the auditing extension will use a new connection to the database different from the current executing connection of the schema. This is to prevent Transaction rollbacks from deleting written audit events. It also allows you to specify an alternative auditing database (like TimeseriesDB) to silo your events.
 
 The default configuration only logs mutations. This is configurable with `AuditConfig`.
 
