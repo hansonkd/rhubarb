@@ -123,7 +123,7 @@ async with connection() as conn:
 
 You can either use Rhubarb stand alone or integrate it with FastAPI and Strawberry for a web service.
 
-### Public Schemas
+## Public Schemas
 
 While you can expose your Schema on FastAPI directly, and maybe that is beneficial for internal use, but for the public users, you do not want all your DB Columns exposed.
 
@@ -173,7 +173,7 @@ private_schema = Schema(
 )
 ```
 
-### Without GQL
+## Without GQL
 
 You can also make queries outside of GQL like a normal ORM. However the optimizations won't benefit you once you convert it into a list or concrete instance.
 
@@ -182,14 +182,7 @@ from rhubarb import query, Desc
 from rhubarb.contrib.postgres.connection import connection
 
 async with connection() as conn:
-    person_list: list[Person] = await query(conn, Person).as_list()
-    limited_person_list: list[Person] = await query(conn, Person).where(lambda x: x.a_bool_column == True).limit(
-        5).as_list()
-    other_table_list: list[TableWithoutSuperClass] = await query(conn, Person).select(
-        lambda x: x.other_table()).as_list()
     bool_list: list[bool] = await query(conn, Person).select(lambda x: x.int_is_big()).as_list()
-    one_person = await query(conn, Person).one()
-    recent_person = await query(conn, Person).order_by(lambda x: Desc(x.example_date_col)).one()
 ```
 
 ## Virtual Columns
@@ -230,7 +223,7 @@ class Person(BaseModel):
 
 Rhubarb will follow child selections and inline as many queries for relation data as possible. This means that most relations that return 1 or 0 objects can be inlined in the same Query as their parent object.
 
-### Relationships with Many Objects
+## Relationships with Many Objects
 
 If you have a parent with many children, you can return a list of children by specifying that you want to return a list using `graphql_type` like so `@relation(graphql_type=list[Pet])`.
 
@@ -313,7 +306,7 @@ class Person(BaseModel):
         return self.pet_stats().avg_weight
 ```
 
-#### Computations executed in Python 
+## Computations executed in Python 
 
 Sometimes you may not want to have all your computations be in SQL. If you want a table method to execute in Python, use the `python_field`.
 
@@ -488,7 +481,7 @@ await query(conn, Person, one=one_or_many).resolve() # immediately execute an re
 
 # Executing Mutations
 await insert_objs(conn, Person, ...).execute() # Execute and return list
-await insert_objs(conn, Person, ...).execute(one=True) # Execute and return list
+await insert_objs(conn, Person, ...).execute(one=True) # Execute and return first object
 await save(conn, Person(...)).execute() # Execute and return one object
 await query(conn, Person).update(...).execute() # Execute and return list
 await query(conn, Person, one=True).update(...).execute() # Execute and return one or none objects
@@ -496,7 +489,7 @@ await query(conn, Person, one=True).delete().execute() # Execute and return one 
 await query(conn, Person).update(...).execute(one=True) # Execute and return one or none objects
 ```
 
-## Default Filter Tables by User
+## Default Filter by User
 
 For each model you can specify a custom `__where__` clause that can take an optional Info. If you give an Info, you can then use the user from the request.
 
@@ -529,6 +522,23 @@ class Query:
         return query(conn, SomeModel, info=info)
 ```
 
+## Efficiently manually querying without GQL
+
+Using the Models through a GQL schema will automatically inline and combine relations. To get the same functionality, when manually using `query` outside of GQL, you will need to return a dataclass from `select` with all the data you want to return.
+
+```python
+import dataclasses
+
+
+@dataclasses.dataclass
+class R:
+    author: Author
+    book: Book
+
+
+# Query author and book at the same time.
+result: list[R] = await query(conn, Book).select(lambda book: R(book=book, author=book.author())).as_list()
+```
 
 # Migrations
 
@@ -591,7 +601,7 @@ class OtherTable(BaseModel):
 ```
 
 
-#### Indexes and Constraints
+## Indexes and Constraints
 
 Indexes and constraints are returned with the `__indexes__` and `__constraints__` function. Rhubarb will monitor if these change by their key and generate migrations if needed.
 
@@ -640,7 +650,7 @@ class AwesomeTable(BaseModel):
 ```
 
 
-### Running Python in Migrations
+## Running Python in Migrations
 
 If you want to run a data migration and you need to run python, then generate migrations with `--empty`, and add  `RunPython` to the operations list.
 
