@@ -43,7 +43,7 @@ async def user_table(postgres_connection, user_config):
 
 @pytest_asyncio.fixture
 async def user(postgres_connection, user_table) -> MyUser:
-    yield await save(MyUser(username="la@example.com"), postgres_connection).execute()
+    yield await save(postgres_connection, MyUser(username="la@example.com")).execute()
 
 
 @pytest.mark.asyncio
@@ -71,7 +71,7 @@ async def test_verification_mixin(postgres_connection, user):
 
     assert verification.code != verification_2.code
 
-    verification = await reload(verification, postgres_connection).one()
+    verification = await reload(postgres_connection, verification).one()
     assert verification.canceled
     assert not verification_2.canceled
 

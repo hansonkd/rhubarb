@@ -87,13 +87,13 @@ async def register_complete(
             require_user_verification=True,
         )
         return await save(
+            conn,
             UserAuthnKey(
                 user_id=user_id,
                 public_key=registration.credential_public_key,
                 sign_count=registration.sign_count,
                 credential_id=registration.credential_id,
             ),
-            conn,
         ).execute(one=True)
 
 
@@ -102,7 +102,7 @@ async def auth_options(
 ) -> PublicKeyCredentialRequestOptions:
     conf = config().webauthn
 
-    all_keys = await query(UserAuthnKey, conn).kw_where(user_id=user_id).as_list()
+    all_keys = await query(conn, UserAuthnKey).kw_where(user_id=user_id).as_list()
 
     public_key = webauthn.generate_authentication_options(
         rp_id=conf.rp_id,
@@ -143,15 +143,18 @@ async def auth_complete(
     expected_challenge = request.session.pop("webauthn_auth_challenge", None)
     if not expected_challenge:
         raise RhubarbException(
-            f"Credential {credential_id} tried to finish registering webauthn without a challenge session"
+            f"Credential {credential_id} tried to finish completing webauthn without a challenge session"
         )
 
     expected_challenge = base64.b64decode(expected_challenge.encode())
     origin = request.session.pop("webauthn_auth_origin", None)
+    auth = config().users
     cors = config().cors
     conf = config().webauthn
-    with rate_limit(key=f"authn-{request.client.host}", max_times=5, ttl_seconds=60):
-        db_credential: UserAuthnKey = await by_pk(UserAuthnKey, credential_id, conn).one()
+    with rate_limit(key=f"authn-{request.client.host}", max_times=auth.auth_rate_limit_max_attempts, ttl_seconds=auth.auth_rate_limit_timeout_seconds):
+        db_credential: UserAuthnKey = await by_pk(
+            conn, UserAuthnKey, credential_id
+        ).one()
 
         auth = webauthn.verify_authentication_response(
             credential=credential,
@@ -162,7 +165,7 @@ async def auth_complete(
             credential_current_sign_count=db_credential.sign_count,
         )
         return (
-            by_pk(UserAuthnKey, credential_id, conn)
+            by_pk(conn, UserAuthnKey, credential_id)
             .kw_update(sign_count=auth.new_sign_count)
             .execute()
         )

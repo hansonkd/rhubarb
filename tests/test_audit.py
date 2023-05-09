@@ -103,7 +103,7 @@ async def test_audit(audit_schema, postgres_connection, basic_data):
         query: GqlQuery
 
     events: list[Tmp] = (
-        await query(AuditEvent, conn)
+        await query(conn, AuditEvent)
         .select(lambda x: Tmp(event=x, query=x.graphql_query()))
         .as_list()
     )
@@ -124,7 +124,7 @@ async def test_audit(audit_schema, postgres_connection, basic_data):
     assert res.errors is None
 
     events: list[Tmp] = (
-        await query(AuditEvent, conn)
+        await query(conn, AuditEvent)
         .select(lambda x: Tmp(event=x, query=x.graphql_query()))
         .as_list()
     )
@@ -149,7 +149,7 @@ async def test_audit(audit_schema, postgres_connection, basic_data):
     assert res.errors is None
 
     events: list[Tmp] = (
-        await query(AuditEvent, conn)
+        await query(conn, AuditEvent)
         .select(lambda x: Tmp(event=x, query=x.graphql_query()))
         .as_list()
     )
@@ -179,7 +179,7 @@ async def test_audit_rollback(
             },
         )
 
-    events = await query(AuditEvent, conn).as_list()
+    events = await query(conn, AuditEvent).as_list()
     assert len(events) == 0
 
 
@@ -201,5 +201,5 @@ async def test_audit_dont_rollback(
             },
         )
 
-    events = await query(AuditEvent, conn).as_list()
+    events = await query(conn, AuditEvent).as_list()
     assert len(events) == 1

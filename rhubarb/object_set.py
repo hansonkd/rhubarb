@@ -7,6 +7,7 @@ import datetime
 import functools
 import inspect
 import json
+import operator
 import uuid
 from collections import defaultdict
 from typing import (
@@ -1329,7 +1330,28 @@ class ObjectSet(Generic[T, S]):
         new_self = self.clone()
         where_clause = new_self.where_clause
         for k, v in kwargs.items():
-            new_clause = getattr(self.selection, k) == v
+            modifier = k.rsplit("__", 1)
+            if len(modifier) == 2:
+                match modifier[-1]:
+                    case "lt":
+                        op = operator.lt
+                    case "lte":
+                        op = operator.le
+                    case "gt":
+                        op = operator.gt
+                    case "gte":
+                        op = operator.ge
+                    case "eq":
+                        op = operator.eq
+                    case "ne":
+                        op = operator.ne
+                    case other:
+                        raise RhubarbException(f"Invalid kw modifier {other}")
+            else:
+                op = operator.eq
+
+            new_clause = op(getattr(self.selection, k), v)
+            
             if where_clause is not None:
                 where_clause = where_clause and new_clause
             else:

@@ -12,7 +12,7 @@ async def test_books(schema, postgres_connection, basic_data):
 
     with track_queries() as tracker:
         res = await schema.execute(
-            "query { all_books { id, title, comments, author_id, published_on, meta_info, internal_bin_info, public, created_at, updated_at } }",
+            "query { all_books { id, title, comments, author_id, published_on, meta_info, internal_bin_info, public, created, updated } }",
             context_value={"conn": conn},
         )
         assert res.errors is None

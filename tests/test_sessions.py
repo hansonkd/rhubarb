@@ -18,7 +18,7 @@ from rhubarb.contrib.audit.extensions import AuditingExtension
 from rhubarb.contrib.audit.models import audit_registry, AuditEvent
 from rhubarb.contrib.postgres.connection import override_conn
 from rhubarb.contrib.sessions.middleware import SessionMiddleware
-from strawberry.asgi import GraphQL
+from rhubarb.contrib.starlette.asgi import GraphQL
 
 from rhubarb.contrib.users.backends import login
 from rhubarb.contrib.users.config import UserConfig
@@ -95,14 +95,14 @@ async def user_table(postgres_connection, user_config):
 
 @pytest_asyncio.fixture
 async def user(postgres_connection, user_table) -> MyUser:
-    yield await save(MyUser(username="la@example.com"), postgres_connection).execute()
+    yield await save(postgres_connection, MyUser(username="la@example.com")).execute()
 
 
 @pytest_asyncio.fixture
 async def superuser(postgres_connection, user_table) -> MyUser:
     yield await save(
-        MyUser(username="admin@example.com", is_staff=True, is_superuser=True),
         postgres_connection,
+        MyUser(username="admin@example.com", is_staff=True, is_superuser=True),
     ).execute()
 
 
@@ -224,7 +224,7 @@ async def test_current_user_impersonate(
     assert data["data"]["current_user"]
     assert data["data"]["current_user"]["id"] == str(user.id)
 
-    events: list[AuditEvent] = await query(AuditEvent, postgres_connection).as_list()
+    events: list[AuditEvent] = await query(postgres_connection, AuditEvent).as_list()
     assert len(events) == 3
     assert events[-2].event_name == ImpersonateEvent.START_IMPERSONATING.value
     assert events[-2].user_id == superuser.id
@@ -242,7 +242,7 @@ async def test_current_user_impersonate(
     assert "data" in data
     assert data["data"]["other_mutation"]
 
-    events: list[AuditEvent] = await query(AuditEvent, postgres_connection).as_list()
+    events: list[AuditEvent] = await query(postgres_connection, AuditEvent).as_list()
     assert len(events) == 4
     assert events[-1].event_name == "OtherMutation"
     assert events[-1].user_id == user.id
@@ -261,7 +261,7 @@ async def test_current_user_impersonate(
     assert "data" in data
     assert data["data"]["stop_impersonating"]
 
-    events: list[AuditEvent] = await query(AuditEvent, postgres_connection).as_list()
+    events: list[AuditEvent] = await query(postgres_connection, AuditEvent).as_list()
     assert len(events) == 6
     assert events[-2].event_name == ImpersonateEvent.STOP_IMPERSONATING.value
 

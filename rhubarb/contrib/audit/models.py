@@ -76,11 +76,11 @@ class AuditEvent(BaseModel):
 async def do_get_or_create_gql_query(
     conn, raw_query: str, hash_digest: bytes = ...
 ) -> GqlQuery:
-    gql_query = await by_pk(GqlQuery, hash_digest, conn).one()
+    gql_query = await by_pk(conn, GqlQuery, hash_digest).one()
     if not gql_query:
         gql_query = await save(
-            GqlQuery(sha_hash=hash_digest, raw_query=raw_query),
             conn,
+            GqlQuery(sha_hash=hash_digest, raw_query=raw_query),
             insert_with_pk=True,
         ).execute()
     return gql_query
@@ -129,4 +129,4 @@ async def log_event(conn, request: HTTPConnection = None, **kwargs):
             "impersonator_id", request.session.get("impersonator_id", None)
         )
         kwargs.setdefault("session_id", request.scope.get("__session_key", None))
-    await save(AuditEvent(**kwargs), conn).execute()
+    await save(conn, AuditEvent(**kwargs)).execute()

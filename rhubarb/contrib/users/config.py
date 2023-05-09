@@ -24,3 +24,5 @@ def default_user_factory():
 class UserConfig:
     verification_timeout: datetime.timedelta = datetime.timedelta(minutes=15)
     user_model: Type["User"] = dataclasses.field(default_factory=default_user_factory)
+    auth_rate_limit_timeout_seconds: int = 60
+    auth_rate_limit_max_attempts: int = 5

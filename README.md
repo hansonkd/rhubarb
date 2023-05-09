@@ -18,6 +18,17 @@ Rhubarb is an ORM baked from scratch focused on automatic optimizations with Pos
 * Native Public / Private Schema dichotomy
 * Pass User and Extra info to use in queries through Strawberry Info's context.
 
+# Extra Rhubarb Features
+
+* HTTP - FastAPI / Starlette
+* Redis - Rate Limiting / Caching
+* Auth - Impersonate / Sessions / Users / WebAuthN / Password
+* Security - CORS / CSRF / TrustedHostNames / Auth Rate Limits
+* Auditing - Record all Mutations
+
+
+# Basics
+
 Rhubarb declares Postgres tables with Strawberry dataclasses.
 
 ```python
@@ -68,7 +79,7 @@ class Person(BaseModel):
 class Query:
     @field(graphql_type=list[Person])
     def all_people(self, info: Info) -> ObjectSet[Person, ModelSelector[Person]]:
-        return query(Person, get_conn(info), info)
+        return query(get_conn(info), Person, info)
 
     
 schema = Schema(
@@ -151,7 +162,7 @@ class PublicQuery:
     # Do the query on the Private type and return an ObjectSet, but make the GQL type a Public type instead.
     @rhubarb.field(graphql_type=list[PublicPerson])
     def public_people(self, info: Info) -> ObjectSet[Person, Person]:
-        return query(Person, get_conn(info), info).where(lambda x: x.example_int_col > 10)
+        return query(get_conn(info), Person, info).where(lambda x: x.example_int_col > 10)
 
 
 private_schema = Schema(
@@ -171,14 +182,14 @@ from rhubarb import query, Desc
 from rhubarb.contrib.postgres.connection import connection
 
 async with connection() as conn:
-    person_list: list[Person] = await query(Person, conn).as_list()
-    limited_person_list: list[Person] = await query(Person, conn).where(lambda x: x.a_bool_column == True).limit(
+    person_list: list[Person] = await query(conn, Person).as_list()
+    limited_person_list: list[Person] = await query(conn, Person).where(lambda x: x.a_bool_column == True).limit(
         5).as_list()
-    other_table_list: list[TableWithoutSuperClass] = await query(Person, conn).select(
+    other_table_list: list[TableWithoutSuperClass] = await query(conn, Person).select(
         lambda x: x.other_table()).as_list()
-    bool_list: list[bool] = await query(Person, conn).select(lambda x: x.int_is_big()).as_list()
-    one_person = await query(Person, conn).one()
-    recent_person = await query(Person, conn).order_by(lambda x: Desc(x.example_date_col)).one()
+    bool_list: list[bool] = await query(conn, Person).select(lambda x: x.int_is_big()).as_list()
+    one_person = await query(conn, Person).one()
+    recent_person = await query(conn, Person).order_by(lambda x: Desc(x.example_date_col)).one()
 ```
 
 ## Virtual Columns
@@ -386,20 +397,21 @@ class Mutation:
 
         # Even though this mutation is not async, we are returning an UpdateSet which will
         # be executed by Rhubarb async middleware.
-        return update(Person, get_conn(info), do, where, info=info, one=True)
+        return update(get_conn(info), Person, do, where, info=info, one=True)
 
     @mutation
     async def update_name(
         self, info: Info, person_id: uuid.UUID, new_name: str
     ) -> Person:
+        conn = get_conn(info)
         # Or avoid the optimization extension and just use await statements. 
         obj = (
-            await query(Person, get_conn(info))
+            await query(conn, Person)
             .where(lambda book: book.id == person_id)
             .one()
         )
         obj.title = new_name
-        return await save(obj, get_conn(info), info=info)
+        return await save(conn, obj, info=info)
 
     
 schema = Schema(
@@ -407,6 +419,117 @@ schema = Schema(
     mutation=Mutation
 )
 ```
+
+# Cheat Sheet
+
+Here are some other ways to query and update data
+
+```python
+import datetime
+from rhubarb.crud import query, by_kw, by_pk, save, find_or_create, insert_objs, reload
+
+# Use keywords
+query(conn, Person).kw_where(username="my_username")
+by_kw(conn, Person, username="my_username")
+by_kw(conn, Person, created__lt=datetime.datetime.now() - datetime.timedelta(1))
+by_kw(conn, Person, created__lte=datetime.datetime.now() - datetime.timedelta(1))
+by_kw(conn, Person, created__gt=datetime.datetime.now() - datetime.timedelta(1))
+by_kw(conn, Person, created__gte=datetime.datetime.now() - datetime.timedelta(1))
+
+
+# Get an object by Primary Key
+by_pk(conn, Person, "4fdd6a2d-ff49-41b6-b92a-dc05beb67298")
+by_pk(conn, Person, "4fdd6a2d-ff49-41b6-b92a-dc05beb67298")
+
+# Updating
+by_kw(conn, Person, username="my_username").kw_update(email="new_email@example.com")
+query(conn, Person).kw_update(email="some@example.com")
+# Update with a function, lets you use fields.
+def set_fn(person):
+    person.email = person.verification().email
+query(conn, Person).update(set_fn)
+
+
+# Deleting
+query(conn, Person).kw_where(username="my_username").delete()
+query(conn, Person).where(lambda x: x.username == "my_username").delete()
+delete(conn, Person, lambda x: x.username == "my_username")
+
+# find_or_create, attempt to find the record by kw, if not, insert the object.
+find_or_create(conn, Person(email="user@example.com"), email="user@example.com")
+
+# Insert an object
+save(conn, Person(email="user@example.com"))
+# Insert many objects
+insert_objs(conn, Person, [Person(email="user@example.com"), Person(email="user2@example.com")])
+
+# Reload an object from the db
+reload(conn, existing_person)
+
+# limit results
+query(conn, Person).limit(1)
+# Order
+query(conn, Person).order_by(lambda x: x.updated)
+query(conn, Person).order_by(lambda x: Desc(x.updated)) # Descend
+query(conn, Person).order_by(lambda x: (Asc(x.birthday), Desc(x.updated))) # Mix and match
+query(conn, Person).order_by(lambda x: x.updated).limit(1) 
+
+# Prepare a result set to indicate that only one row will be returned.
+update(conn, Person, do, where) # will return a list when `execute` is called
+update(conn, Person, do, where, one=True)  # will return one or None rows when `execute` is called
+query(conn, Person) # will return a list when `resolve` is called
+query(conn, Person, one=True) # will return one or None rows when `resolve` is called
+
+
+# Executing Object sets
+await query(conn, Person).one() # immediately execute an return the result (one or none)
+await query(conn, Person).as_list() # immediately execute an return the result (list)
+await query(conn, Person, one=one_or_many).resolve() # immediately execute an return the result (dependent on `one` kwarg passed to query)
+
+# Executing Mutations
+await insert_objs(conn, Person, ...).execute() # Execute and return list
+await insert_objs(conn, Person, ...).execute(one=True) # Execute and return list
+await save(conn, Person(...)).execute() # Execute and return one object
+await query(conn, Person).update(...).execute() # Execute and return list
+await query(conn, Person, one=True).update(...).execute() # Execute and return one or none objects
+await query(conn, Person, one=True).delete().execute() # Execute and return one or none objects
+await query(conn, Person).update(...).execute(one=True) # Execute and return one or none objects
+```
+
+## Default Filter Tables by User
+
+For each model you can specify a custom `__where__` clause that can take an optional Info. If you give an Info, you can then use the user from the request.
+
+```python
+import rhubarb
+from rhubarb import table, column, references
+from rhubarb.errors import PermissionDenied
+
+
+# Filter model by user by default...
+@table
+class SomeModel:
+    name: str = column()
+    user_id = references(MyUserModel.__table__)
+
+    def __where__(self, info: Info):
+        user = info.context["request"].user
+        if not user.is_authenticated:
+            raise PermissionDenied
+        elif user.is_staff or user.is_superuser:
+            return True
+        return self.user_id == user.id
+
+
+@rhubarb.type
+class Query:
+    @rhubarb.field(graphql_type=list[SomeModel])
+    def my_field(self, info: Info):
+        # To query SomeModel you must pass an info object now.
+        return query(conn, SomeModel, info=info)
+```
+
+
 # Migrations
 
 Rhubarb has basic support for migrations. It will watch for new, changed columns and tables.
@@ -533,10 +656,10 @@ from rhubarb import query, save
 
 async def mig_fn(info: migrations.MigrationInfo):
     RatingModel = info.get_model("ratingmodel")
-    objs = await query(RatingModel, info.conn).as_list()
+    objs = await query(info.conn, RatingModel).as_list()
     for obj in objs:
         obj.rating += 10
-        await save(obj, info.conn)
+        await save(info.conn, obj)
 
 
 def migrate():
@@ -554,12 +677,11 @@ def migrate():
 There are some convenience superclasses that will add primary keys and utility fields to your Model automatically.
 
 * BaseModel - UUID Primary Key
-* BaseUpdateAtModel - UUID Primary Key, created_at, updated_at fields.
+* BaseUpdateAtModel - UUID Primary Key, created, updated fields.
 * BaseIntModel - SERIAL Primary Key
-* BaseIntUpdateAtModel - SERIAL Primary Key, created_at, updated_at fields.
+* BaseIntUpdateAtModel - SERIAL Primary Key, created, updated fields.
 
 # Built-in Column / Sql Types
-
 
 * `dict` -> `JSONB`
 * `list` -> `JSONB`
@@ -582,3 +704,171 @@ There are some convenience superclasses that will add primary keys and utility f
 * `rhubarb.PhoneNumber` -> `TEXT`
 * `rhubarb.Email` -> `TEXT`
 * `None` -> `NULL` (cannot use as column, use Optional instead.)
+
+
+
+# Auth
+
+```python
+import uuid
+
+import rhubarb
+from rhubarb import Schema, Registry, table, get_conn
+from rhubarb.config import Config
+from rhubarb.contrib.users.models import User, user_registry, get_user
+from rhubarb.contrib.users.backends import login
+from rhubarb.contrib.users.config import UserConfig
+from rhubarb.contrib.users.middleware import SessionAuthenticationMiddleware
+from rhubarb.contrib.sessions.middleware import SessionMiddleware
+from rhubarb.contrib.starlette.asgi import GraphQL
+
+from strawberry.types import Info
+from starlette.applications import Starlette
+from starlette.routing import Route
+from starlette.middleware import Middleware
+
+
+migrations_registry = Registry()
+# Link the user registry for supporting models.
+migrations_registry.link(user_registry)
+
+
+# Add your own user.
+@table(registry=migrations_registry)
+class MyUser(User):
+    pass
+
+
+@table(registry=migrations_registry)
+class CustomModel:
+    pass
+
+
+
+config = Config(
+    registry=migrations_registry,
+    users=UserConfig(
+        user_model=MyUser
+    )
+)
+
+
+@rhubarb.type
+class Query:
+    @rhubarb.field
+    def current_user(self, info: Info) -> MyUser | None:
+        if info.context["request"].user.is_authenticated:
+            return info.context["request"].user
+        return None
+
+
+@rhubarb.type
+class Mutation:
+    @rhubarb.mutation
+    async def login(self, user_id: uuid.UUID, info: Info) -> MyUser:
+        conn = get_conn(info)
+        user = await get_user(conn, user_id)
+        return await login(conn, user, info.context["request"])
+
+
+schema = Schema(
+    query=Query,
+    mutation=Mutation,
+)
+
+app = Starlette(
+    middleware=[
+        Middleware(SessionMiddleware),
+        Middleware(SessionAuthenticationMiddleware),
+    ],
+    routes=[Route("/graphql/", GraphQL(schema, debug=True))],
+)
+```
+
+# Auditing
+
+Rhubarb comes with built-in Auditing extension that can record all queries, subscriptions, and mutations.
+
+By default, the auditing extension will use a new connection to the database different from the current executing connection of the schema. This is to prevent Transaction rollbacks from rolling back auditing events. It also allows you to specify an alternative auditing datbase (like TimeseriesDB) to silo your events.
+
+The default configuration only logs mutations. This is configurable with `AuditConfig`.
+
+You an save custom Audit events with `rhubarb.contrib.audit.models.log_event`
+
+```python
+from rhubarb import Schema
+from rhubarb.contrib.audit.extensions import AuditingExtension
+
+
+schema = Schema(
+    query=...,
+    mutation=...,
+    extensions=[
+        AuditingExtension,
+    ]
+)
+```
+
+
+# Redis and Caching
+
+Rhubarb has built in integrations with redis for caching and ratelimiting and pubsub.
+
+```python
+from rhubarb.contrib.redis.connection import connection
+from rhubarb.contrib.redis.cache import cache, local_cache, local_only_cache, clear_cache
+
+import aiohttp
+
+
+async def use_redis():
+    async with connection() as r:
+        await r.set("some_key", "some_value")
+        return await r.get("some_key")
+
+    
+# Cache a function in Redis for a minute
+@cache(ttl_seconds=60)
+async def cached_fn():
+        resp = await aiohttp.get("http://example.com")
+        return resp.json()
+        
+# Cache a function locally and in Redis. On Read, prioritize local memory.
+# Be careful, clearing cache with local
+@local_cache(ttl_seconds=60)
+async def cached_fn():
+        resp = await aiohttp.get("http://example.com")
+        return resp.json()
+
+
+# Cache a function locally only. 
+@local_only_cache(ttl_seconds=60)
+async def local_only_cache():
+    resp = await aiohttp.get("http://example.com")
+    return resp.json()
+        
+        
+# Clear the cache by passing the function.
+await clear_cache(cached_fn)
+```
+
+# Rate limiting
+
+Rhubarb has built-in a rate limit context manager and decorator. It is synchronized by Redis so can be used in distributed apps to secure parts of the code from bad actors.
+
+```python
+from starlette.requests import Request
+from rhubarb.contrib.redis.rate_limit import rate_limit
+
+
+# Rate limit by IP. Once a minute.
+async def once_a_minute(request: Request):
+    with rate_limit(key=f"my_action-{request.client.host}", max_times=1, ttl_seconds=60):
+        return await some_other_function()
+
+
+# Rate limit as a decorator (this ratelimit would use the same key for all users).
+@rate_limit(key=f"my_action", max_times=1, ttl_seconds=60)
+async def once_a_minute():
+    return await some_other_function()
+```

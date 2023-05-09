@@ -2,10 +2,9 @@ import importlib
 import os
 import dataclasses
 from pathlib import Path
-from typing import Optional
 
 from cachetools import TTLCache, Cache
-from rhubarb.contrib.cors.config import CorsConfig
+from rhubarb.contrib.starlette.config import CorsConfig
 
 from rhubarb.contrib.email.config import EmailConfig
 from rhubarb.contrib.postgres.config import PostgresConfig, load_postgres_config
@@ -14,7 +13,6 @@ from rhubarb.contrib.users.config import UserConfig
 from rhubarb.contrib.sessions.config import SessionConfig
 from rhubarb.contrib.audit.config import AuditConfig
 from rhubarb.contrib.webauthn.config import WebAuthnConfig
-from rhubarb.env import str_env, int_env, list_str_env
 from rhubarb.errors import RhubarbException
 from rhubarb.object_set import Registry, DEFAULT_REGISTRY
 

@@ -30,21 +30,21 @@ from rhubarb.object_set import (
 
 
 def query(
-    m: Type[T], conn: AsyncConnection, info: Info = None
+    conn: AsyncConnection, m: Type[T], info: Info = None, one=False
 ) -> ObjectSet[T, ModelSelector[T]]:
-    return ObjectSet(m, conn=conn, info=info)
+    return ObjectSet(m, conn=conn, info=info, one=one)
 
 
 def reload(
-    m: T, conn: AsyncConnection, info: Info = None
+    conn: AsyncConnection, m: T, info: Info = None
 ) -> ObjectSet[T, ModelSelector[T]]:
-    return by_pk(m.__class__, pk_concrete(m), conn, info)
+    return by_pk(conn, m.__class__, pk_concrete(m), info)
 
 
 def by_pk(
+    conn: AsyncConnection,
     m: Type[T],
     pk: SQLValue | tuple[SQLValue, ...],
-    conn: AsyncConnection,
     info: Info = None,
 ) -> ObjectSet[T, ModelSelector[T]]:
     return ObjectSet(m, conn=conn, info=info, one=True).where(
@@ -52,9 +52,20 @@ def by_pk(
     )
 
 
-def delete(
-    model: Type[T],
+def by_kw(
     conn: AsyncConnection,
+    m: Type[T],
+    info: Info = None,
+    **kwargs
+) -> ObjectSet[T, ModelSelector[T]]:
+    return ObjectSet(m, conn=conn, info=info, one=True).kw_where(
+        **kwargs
+    )
+
+
+def delete(
+    conn: AsyncConnection,
+    model: Type[T],
     where: Callable[[ModelSelector], Selector[bool] | bool],
     info: Info | None = None,
     one: bool = False,
@@ -109,8 +120,8 @@ def build_update_set(
 
 
 def update(
-    model: Type[T],
     conn: AsyncConnection,
+    model: Type[T],
     set_fn: Callable[[ModelUpdater], ModelUpdater | None],
     where: Callable[[ModelSelector], Selector[bool] | bool],
     info: Info | None = None,
@@ -140,15 +151,17 @@ def update(
 
 
 async def find_or_create(
-    obj: T, conn: AsyncConnection, pk: SQLValue | tuple[SQLValue], info: Info = None
+    conn: AsyncConnection, obj: T, info: Info = None, **kwargs
 ) -> T:
     model = obj.__class__
+    if obj := await by_kw(model, info=info, **kwargs).one():
+        return obj
     async with conn.transaction() as txn:
         try:
             return await save(obj, conn, info=info).execute()
         except psycopg.errors.UniqueViolation:
             raise Rollback(txn)
-    return await by_pk(model, pk, conn, info=info).one()
+    return await by_kw(model, info=info, **kwargs).one()
 
 
 def empty_pk(obj: T):
@@ -161,11 +174,11 @@ def empty_pk(obj: T):
     )
 
 
-def save(obj: T, conn: AsyncConnection, info: Info | None = None, insert_with_pk=False):
+def save(conn: AsyncConnection, obj: T, info: Info | None = None, insert_with_pk=False):
     model = obj.__class__
     if empty_pk(obj) or insert_with_pk:
         return insert_objs(
-            model, conn, [obj], skip_pks=not insert_with_pk, one=True, returning=True
+            conn, model, [obj], skip_pks=not insert_with_pk, one=True, returning=True
         )
 
     object_set = ObjectSet(model, conn=conn, info=info)
@@ -198,8 +211,8 @@ def save(obj: T, conn: AsyncConnection, info: Info | None = None, insert_with_pk
 
 
 def insert(
-    model: Type[T],
     conn: AsyncConnection,
+    model: Type[T],
     cols_fn: Callable[[ModelSelector], list[ColumnField, ...]],
     values_fn: Callable[[ModelSelector], list[tuple[V, ...]]],
     info: Info | None = None,
@@ -258,8 +271,8 @@ def build_insert_set(
 
 
 def insert_objs(
-    model: Type[T],
     conn: AsyncConnection,
+    model: Type[T],
     values: list[T],
     skip_pks=True,
     exclude_columns: set[str] = None,

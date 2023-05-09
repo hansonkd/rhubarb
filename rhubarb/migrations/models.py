@@ -33,5 +33,5 @@ async def mark_migration_as_applied(
     conn: AsyncConnection, migration_id: str
 ) -> AppliedMigration:
     return await insert_objs(
-        AppliedMigration, conn, [AppliedMigration(migration_id=migration_id)]
+        conn, AppliedMigration, [AppliedMigration(migration_id=migration_id)]
     ).execute(one=True)

@@ -87,15 +87,15 @@ async def basic_data(postgres_connection, run_migrations):
     conn = postgres_connection
 
     reviewers = await insert_objs(
-        Reviewer,
         conn,
+        Reviewer,
         [Reviewer(name="Jane Jones"), Reviewer(name="Jo Bob")],
         returning=True,
     ).execute()
 
     authors = await insert_objs(
-        Author,
         conn,
+        Author,
         [
             Author(name="Smarty McPy"),
             Author(name="Sandy Doe"),
@@ -105,8 +105,8 @@ async def basic_data(postgres_connection, run_migrations):
     ).execute()
 
     books = await insert_objs(
-        Book,
         conn,
+        Book,
         [
             Book(
                 title="Python for Dummies",
@@ -149,8 +149,8 @@ async def basic_data(postgres_connection, run_migrations):
             )
 
     ratings = await insert_objs(
-        RatingModel,
         conn,
+        RatingModel,
         ratings_to_insert,
         returning=True,
     ).execute()
@@ -297,17 +297,17 @@ class SomeResult:
 class Query:
     @strawberry.field(graphql_type=list[Book])
     def all_books(self, info: Info) -> ObjectSet[Book, ModelSelector[Book]]:
-        return query(Book, get_conn(info), info)
+        return query(get_conn(info), Book, info)
 
     @strawberry.field(graphql_type=list[RatingModel])
     def all_ratings(
         self, info: Info
     ) -> ObjectSet[RatingModel, ModelSelector[RatingModel]]:
-        return query(RatingModel, get_conn(info), info)
+        return query(get_conn(info), RatingModel, info)
 
     @strawberry.field(graphql_type=list[RatingsByBook])
     def agg(self, info: Info) -> ObjectSet[RatingsByBook, ModelSelector[RatingsByBook]]:
-        return query(RatingsByBook, get_conn(info), info)
+        return query(get_conn(info), RatingsByBook, info)
 
 
 @strawberry.type
@@ -329,15 +329,15 @@ class Mutation:
         def where(book: ModelSelector[Book]):
             return book.id == book_id
 
-        return update(Book, get_conn(info), do, where, info=info, one=True)
+        return update(get_conn(info), Book, do, where, info=info, one=True)
 
     @strawberry.mutation
     async def new_review(
         self, info: Info, book_id: uuid.UUID, reviewer_id: uuid.UUID, rating: int
     ) -> RatingModel:
         return insert_objs(
-            RatingModel,
             get_conn(info),
+            RatingModel,
             [RatingModel(book_id=book_id, reviewer_id=reviewer_id, rating=rating)],
             info=info,
             one=True,
@@ -353,8 +353,8 @@ class Mutation:
             return SomeRatingResult(
                 ok=True,
                 rating=insert_objs(
-                    RatingModel,
                     get_conn(info),
+                    RatingModel,
                     [
                         RatingModel(
                             book_id=book_id, reviewer_id=reviewer_id, rating=rating
@@ -370,17 +370,17 @@ class Mutation:
         self, info: Info, book_id: uuid.UUID, new_title: str
     ) -> Book:
         obj = (
-            await query(Book, get_conn(info))
+            await query(get_conn(info), Book)
             .where(lambda book: book.id == book_id)
             .one()
         )
         obj.title = new_title
-        return save(obj, get_conn(info), info=info)
+        return save(get_conn(info), obj, info=info)
 
     @strawberry.mutation
     async def delete_book(self, info: Info, book_id: uuid.UUID) -> uuid.UUID:
         return (
-            await by_pk(Book, book_id, get_conn(info), info=info)
+            await by_pk(get_conn(info), Book, book_id, info=info)
             .select(lambda x: x.id)
             .delete()
             .execute()
@@ -389,7 +389,7 @@ class Mutation:
     @strawberry.mutation
     async def delete_book_raises(self, info: Info, book_id: uuid.UUID) -> uuid.UUID:
         deleted_id = (
-            await by_pk(Book, book_id, get_conn(info), info=info)
+            await by_pk(get_conn(info), Book, book_id, info=info)
             .select(lambda x: x.id)
             .delete()
             .execute()
@@ -419,4 +419,4 @@ class PublicBook:
 class PublicQuery:
     @strawberry.field(graphql_type=list[PublicBook])
     def all_public_books(self, info: Info) -> ObjectSet[Book, ModelSelector[Book]]:
-        return query(Book, get_conn(info), info)
+        return query(get_conn(info), Book, info)

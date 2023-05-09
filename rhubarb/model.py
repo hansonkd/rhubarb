@@ -15,8 +15,8 @@ class BaseModel(SqlModel):
 
 @dataclasses.dataclass
 class BaseUpdatedAtModel(BaseModel):
-    created_at: datetime.datetime = column(insert_default="now()")
-    updated_at: datetime.datetime = column(update_default="now()")
+    created: datetime.datetime = column(insert_default="now()")
+    updated: datetime.datetime = column(update_default="now()")
 
 
 @dataclasses.dataclass
@@ -26,5 +26,5 @@ class BaseIntModel(BaseModel):
 
 @dataclasses.dataclass
 class BaseIntUpdatedAtModel(BaseIntModel):
-    created_at: datetime.datetime = column(insert_default="now()")
-    updated_at: datetime.datetime = column(update_default="now()")
+    created: datetime.datetime = column(insert_default="now()")
+    updated: datetime.datetime = column(update_default="now()")

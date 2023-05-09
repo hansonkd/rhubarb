@@ -106,17 +106,20 @@ class ResetPasswordVerification(VerificationMixin):
     code: str = column(default_factory=random_token)
 
 
-async def get_user(conn, user_id) -> U:
-    UserModel = config().users.user_model
+async def get_user(conn, user_id=None, /, **kwargs) -> U:
 
-    return await query(UserModel, conn).where(lambda x: x.id == user_id).one()
+    UserModel = config().users.user_model
+    if user_id is not None:
+        return await query(conn, UserModel).where(lambda x: x.id == user_id).one()
+    else:
+        return await query(conn, UserModel).kw_where(**kwargs).one()
 
 
 Verif = TypeVar("Verif", bound=VerificationMixin)
 
 
 async def get_and_complete_verification(
-    cls: Type[Verif], conn, verification_id, code
+    conn, cls: Type[Verif], verification_id, code
 ) -> Verif:
     time_delta = config().users.verification_timeout
     last_valid_time = datetime.datetime.utcnow() - time_delta
@@ -125,7 +128,7 @@ async def get_and_complete_verification(
         m.verified = datetime.datetime.utcnow()
 
     return (
-        await query(cls, conn)
+        await query(conn, cls)
         .where(
             lambda x: x.id == verification_id
             and x.code == code
@@ -152,7 +155,7 @@ async def register(conn: AsyncConnection, **kwargs) -> RegistrationResult:
         kwargs["password"] = PasswordHash.new(password)
     elif isinstance(password, PasswordHash):
         kwargs["password"] = password
-    new_user: User = await save(UserModel(**kwargs), conn).execute()
+    new_user: User = await save(conn, UserModel(**kwargs)).execute()
     email_verification = None
     phone_verification = None
 
@@ -176,10 +179,10 @@ async def set_email(
     verif = EmailVerification(user_id=user.id, email=new_email)
     if mark_sent:
         verif.sent = datetime.datetime.utcnow()
-    await query(EmailVerification, conn).kw_where(user_id=user.id).kw_update(
+    await query(conn, EmailVerification).kw_where(user_id=user.id).kw_update(
         canceled=datetime.datetime.utcnow()
     ).execute()
-    return await save(verif, conn).execute()
+    return await save(conn, verif).execute()
 
 
 async def set_phone_number(
@@ -188,7 +191,7 @@ async def set_phone_number(
     verif = PhoneVerification(user_id=user.id, phone_number=phone_number)
     if mark_sent:
         verif.sent = datetime.datetime.utcnow()
-    return await save(verif, conn).execute()
+    return await save(conn, verif).execute()
 
 
 async def reset_password(
@@ -197,19 +200,19 @@ async def reset_password(
     verif = ResetPasswordVerification(user_id=user.id)
     if mark_sent:
         verif.sent = datetime.datetime.utcnow()
-    return await save(verif, conn).execute()
+    return await save(conn, verif).execute()
 
 
 async def verify_email(
     conn: AsyncConnection, verification_id: uuid.UUID, code: str, update_user=False
 ) -> Optional[U]:
     if verification := await get_and_complete_verification(
-        EmailVerification, conn, verification_id, code
+        conn, EmailVerification, verification_id, code
     ):
         user = await get_user(conn, verification.user_id)
         if update_user:
             user.email = verification.email
-            return await save(user, conn).execute()
+            return await save(conn, user).execute()
         return user
 
 
@@ -217,12 +220,12 @@ async def verify_phone(
     conn: AsyncConnection, verification_id: uuid.UUID, code: str, update_user=False
 ) -> Optional[U]:
     if verification := await get_and_complete_verification(
-        EmailVerification, conn, verification_id, code
+        conn, EmailVerification, verification_id, code
     ):
         user = await get_user(conn, verification.user_id)
         if update_user:
             user.phone_number = verification.phone_number
-            return await save(user, conn).execute()
+            return await save(conn, user).execute()
         return user
 
 
@@ -230,11 +233,11 @@ async def verify_password_reset(
     conn: AsyncConnection, verification_id: uuid.UUID, code: str
 ) -> bool:
     if verification := await get_and_complete_verification(
-        ResetPasswordVerification, conn, verification_id, code
+        conn, ResetPasswordVerification, verification_id, code
     ):
         return True
 
 
 async def set_password(conn: AsyncConnection, user: User, new_password: str) -> U:
     user.password = PasswordHash.new(new_password)
-    return await save(user, conn).execute()
+    return await save(conn, user).execute()

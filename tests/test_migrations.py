@@ -274,7 +274,7 @@ async def test_add_fk(postgres_connection):
 async def test_run_python(postgres_connection):
     async def mig_fn(info: MigrationInfo):
         MigRatingModel = info.get_model("ratingmodel")
-        objs = await query(MigRatingModel, info.conn).as_list()
+        objs = await query(info.conn, MigRatingModel).as_list()
         assert len(objs) == 0
 
     async with postgres_connection.transaction(force_rollback=True):
