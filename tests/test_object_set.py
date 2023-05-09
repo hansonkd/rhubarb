@@ -24,6 +24,33 @@ async def test_books(schema, postgres_connection, basic_data):
 
 
 @pytest.mark.asyncio
+async def test_books(schema, postgres_connection, basic_data):
+    conn = postgres_connection
+
+    with track_queries() as tracker:
+        res = await schema.execute(
+            "query { book_count }",
+            context_value={"conn": conn},
+        )
+        assert res.errors is None
+        assert len(tracker.queries) == 1
+        assert res.data["book_count"] == 4
+
+
+@pytest.mark.asyncio
+async def test_books(schema, postgres_connection, basic_data):
+    conn = postgres_connection
+
+    with track_queries() as tracker:
+        res = await schema.execute(
+            "query { book_exists }",
+            context_value={"conn": conn},
+        )
+        assert res.errors is None
+        assert len(tracker.queries) == 1
+        assert res.data["book_exists"]
+
+@pytest.mark.asyncio
 async def test_books_author(schema, postgres_connection, basic_data):
     conn = postgres_connection
 

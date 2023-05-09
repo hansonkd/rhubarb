@@ -707,6 +707,17 @@ class Value(Selector[V]):
             yield from self.val.__joins__(seen)
 
 
+class RawSQL(Selector[V]):
+    def __init__(self, sql: str):
+        self.sql = sql
+
+    def __sql__(self, builder: SQLBuilder):
+        builder.write(self.sql)
+
+    def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
+        return iter(())
+
+
 class PythonValueExtractor(Extractor[V]):
     def __init__(
         self,
@@ -1533,6 +1544,18 @@ class ObjectSet(Generic[T, S]):
 
         return aiter(f())
 
+    async def count(self) -> int:
+        new_self = self.clone()
+        raw = RawSQL("COUNT(*)")
+        new_self.pk_selector = raw
+        return await new_self.select(lambda x: raw).one()
+
+    async def exists(self) -> bool:
+        new_self = self.clone()
+        raw = RawSQL("TRUE")
+        new_self.pk_selector = raw
+        return await new_self.select(lambda x: raw).one() or False
+
     async def one(self) -> Optional[V]:
         if not self.row_cache:
             self.limit_clause = 1
@@ -1601,6 +1624,7 @@ class MutationSet:
                 return return_rows
         else:
             await self.conn.execute(builder.q, builder.vars)
+
 
     @overload
     async def execute(self) -> list[V]:

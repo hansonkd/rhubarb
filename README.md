@@ -9,22 +9,25 @@ Rhubarb is an ORM baked from scratch focused on automatic optimizations with Pos
 # Rhubarb at a glance
 
 * Asyncio Native
+* Build SQL functions with Python
 * Built on GraphQL for optimization layer on nested queries
-* Doesn't use any other Python ORM for DB access, only Psycopg3
 * Migrations - Automatically generate Schema changes as your data model updates.
 * Intuitively Solve N+1 without even realizing it
 * Simplify Aggregations / Joins / Subqueries
 * Heavily inspired by Django and built with the philosophy of take the best parts.
 * Native Public / Private Schema dichotomy
 * Pass User and Extra info to use in queries through Strawberry Info's context.
+* Doesn't use any other Python ORM for DB access, only Psycopg3
 
 # Extra Rhubarb Features
+
+Rhubarb comes with some extra integrations to make using the ORM easy...
 
 * HTTP - FastAPI / Starlette
 * Redis - Rate Limiting / Caching
 * Auth - Impersonate / Sessions / Users / WebAuthN / Password
 * Security - CORS / CSRF / TrustedHostNames / Auth Rate Limits
-* Auditing - Record all Mutations
+* Auditing - Record all Mutations / Queries / Subscriptions / Custom Events
 
 
 # Basics
@@ -125,7 +128,7 @@ You can either use Rhubarb stand alone or integrate it with FastAPI and Strawber
 
 ## Public Schemas
 
-While you can expose your Schema on FastAPI directly, and maybe that is beneficial for internal use, but for the public users, you do not want all your DB Columns exposed.
+While you can expose your Schema on FastAPI directly, and that may be beneficial for internal use, but for the public users, you do not want all your DB Columns exposed.
 
 Simply create a new schema using standard `type` and `field` exposing only the fields you want from the underlying object exposed.
 
@@ -175,7 +178,7 @@ public_schema = Schema(
 
 ## Without GQL
 
-You can also make queries outside of GQL like a normal ORM. However the optimizations won't benefit you once you convert it into a list or concrete instance.
+You can also make queries outside of GQL like a normal ORM for use in general Python apps and tasks.
 
 ```python
 from rhubarb import query, Desc
@@ -191,7 +194,7 @@ Rhubarb tables are different from standard Python objects. methods decorated wit
 
 ```python
 from rhubarb import  BaseModel, ModelSelector, column, table, virtual_column
-from rhubarb.functions import concat, case, Value
+from rhubarb.functions import concat, case, val
 
 
 @table
@@ -212,10 +215,10 @@ class Person(BaseModel):
     @virtual_column
     def case_computation(self: ModelSelector) -> str:
         return case(
-            (self.score == 0, Value("Bad")),
-            (self.score < 5, Value("Poor")),
-            (self.score < 7, Value("Good")),
-            default=Value("Excellent")
+            (self.score == 0, val("Bad")),
+            (self.score < 5, val("Poor")),
+            (self.score < 7, val("Good")),
+            default=val("Excellent")
         )
 ```
 
@@ -481,9 +484,11 @@ query(conn, Person, one=True) # will return one or None rows when `resolve` is c
 
 
 # Executing Object sets
-await query(conn, Person).one() # immediately execute an return the result (one or none)
-await query(conn, Person).as_list() # immediately execute an return the result (list)
-await query(conn, Person, one=one_or_many).resolve() # immediately execute an return the result (dependent on `one` kwarg passed to query)
+await query(conn, Person).one() # return the result (one or none)
+await query(conn, Person).as_list() # return the result (list)
+await query(conn, Person, one=one_or_many).resolve() # return the result (dependent on `one` kwarg passed to query)
+await query(conn, Person).count() # Executes a COUNT(*) and returns an int
+await query(conn, Person).exists() # Executes a SELECT TRUE LIMIT 1 and returns an bool
 
 # Executing Mutations
 await insert_objs(conn, Person, ...).execute() # Execute and return list

@@ -299,6 +299,14 @@ class Query:
     def all_books(self, info: Info) -> ObjectSet[Book, ModelSelector[Book]]:
         return query(get_conn(info), Book, info)
 
+    @strawberry.field
+    async def book_count(self, info: Info) -> int:
+        return await query(get_conn(info), Book, info).count()
+
+    @strawberry.field
+    async def book_exists(self, info: Info) -> bool:
+        return await query(get_conn(info), Book, info).exists()
+
     @strawberry.field(graphql_type=list[RatingModel])
     def all_ratings(
         self, info: Info
