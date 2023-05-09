@@ -1351,7 +1351,7 @@ class ObjectSet(Generic[T, S]):
                 op = operator.eq
 
             new_clause = op(getattr(self.selection, k), v)
-            
+
             if where_clause is not None:
                 where_clause = where_clause and new_clause
             else:
@@ -1534,6 +1534,8 @@ class ObjectSet(Generic[T, S]):
         return aiter(f())
 
     async def one(self) -> Optional[V]:
+        if not self.row_cache:
+            self.limit_clause = 1
         async for item in self:
             return item
 

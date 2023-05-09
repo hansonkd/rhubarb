@@ -89,12 +89,12 @@ schema = Schema(
 
 ## Using GQL as an ORM client
 
-Now we can use our schema to make queries and Rhubarb will try to optimize them for you.
+Now we can use our schema to make queries and Rhubarb will optimize them for you.
 
 Currently, Rhubarb only does a few optimizations but they cover most use cases:
 
 * Selecting only the columns being asked for in the current GQL query
-* Inlining joins the don't produce more rows.
+* Inlining joins that don't produce more rows.
 * Managing exploding cartesian products from m:n joins
 * Pushing Aggregates to Subquery
 * Combining aggregates if they use same `GROUP BY`
@@ -165,7 +165,7 @@ class PublicQuery:
         return query(get_conn(info), Person, info).where(lambda x: x.example_int_col > 10)
 
 
-private_schema = Schema(
+public_schema = Schema(
     query=PublicQuery,
     extensions=[
         RhubarbExtension
@@ -263,7 +263,7 @@ Once a `__group_by__` is set on a table, all methods and virtual columns have to
 Rhubarb will make a subquery and join to do the groupby in order to avoid mixing groupby in your parent query.
 
 ```python
-from rhubarb import  BaseModel, column, table, relation, virtual_column
+from rhubarb import  ModelSelector, BaseModel, column, table, relation, virtual_column
 from rhubarb.functions import sum_agg, avg_agg
 
 
@@ -277,12 +277,12 @@ class Pet(BaseModel):
 @table(skip_registry=True)
 class PetByOwner(Pet):
     @virtual_column
-    def avg_weight(self) -> float:
-        return avg_agg(self.weight_lbs)
+    def avg_weight(self: ModelSelector) -> float:
+        return avg_agg(self, self.weight_lbs)
     
     @virtual_column
-    def weight_of_all_lets(self) -> float:
-        return sum_agg(self.weight_lbs)
+    def weight_of_all_lets(self: ModelSelector) -> float:
+        return sum_agg(self, self.weight_lbs)
     
     def __group_by__(self):
         return self.owner_id
@@ -337,18 +337,17 @@ class Person(BaseModel):
 
     # Executed in SQL so need to use special SQL function.
     @virtual_column
-    def full_name_sql(self):
+    def full_name_sql(self) -> str:
         return concat(self.first_name, " ", self.last_name)
 
-    # Executed in Python.
+    # Executed in Python, you have to list the SQL dependencies.
     @python_field(lambda x: [x.first_name, x.last_name])
-    def full_name_python(self, first_name: str, last_name: str):
+    def full_name_python(self, first_name: str, last_name: str) -> str:
         return f"{first_name} {last_name}"
 
     # Can use kwargs and async functions...
-    @staticmethod
     @python_field(lambda x: {"fn": x.first_name, "pokemon_id": x.favorite_pokemon})
-    async def api_backed_python_field(fn: str, pokemon_id: int):
+    async def api_backed_python_field(self, fn: str, pokemon_id: int) -> str:
         # In the real world, probably would cache this HTTP Call or something.
         async with aiohttp.ClientSession() as session:
             pokemon_url = f'https://pokeapi.co/api/v2/pokemon/{pokemon_id}/'
@@ -359,7 +358,7 @@ class Person(BaseModel):
 
     # Can use relations and other virtual columns...
     @python_field(lambda x: {"sql_full_name": x.full_name_sql(), "address": x.address()})
-    def full_name_with_relation_python(self, sql_full_name: str, address: Address):
+    def full_name_with_relation_python(self, sql_full_name: str, address: Address) -> str:
         return f"{sql_full_name} from {address.city} {address.state}"
 ```
 
