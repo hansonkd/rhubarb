@@ -400,11 +400,7 @@ class Mutation:
     ) -> Person:
         conn = get_conn(info)
         # Or avoid the optimization extension and just use await statements. 
-        obj = (
-            await query(conn, Person)
-            .where(lambda book: book.id == person_id)
-            .one()
-        )
+        obj = await by_pk(conn, Person, person_id).one()
         obj.title = new_name
         return await save(conn, obj, info=info)
 
@@ -918,3 +914,51 @@ async def once_a_minute(request: Request):
 async def once_a_minute():
     return await some_other_function()
 ```
+
+
+
+# A note about optimizations
+
+The RhubarbExtension will look at returned ObjectSets, UpdateSets, DeleteSets and InsertSets and optimize them based on the current GQL query. If you execute the objectset into a list or object, this optmization cannot occur.
+
+If you are in doubt, try to write fields as non-async functions which will prevent a DB hit outside of the Extension.
+
+```python
+@field
+async def some_field(...):
+    # return an list, not optimized by extension.
+    return await query(conn, Model).as_list()
+
+
+@field
+async def some_field(...):
+    # return an object, not optimized by extension.
+    return await query(conn, Model).one()
+
+
+@field
+def some_field(...):
+    # return an objectset, optimized by extension
+    return query(conn, Model)
+
+
+@field
+def some_field(...):
+    # return an objectset that returns 1 object, optimized by extension
+    return query(conn, Model, one=True)
+
+    
+@mutation
+async def update_name(...):
+    ...
+    # This would execute the function and select all field, children queries not optimized.
+    return await save(conn, obj).execute()
+
+
+@mutation
+async def update_name(...):
+    ...
+    # This returns an UpdateSet to Extension, Extension determine what fields to select.
+    return save(conn, obj)
+```
+
