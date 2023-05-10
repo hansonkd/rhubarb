@@ -1,0 +1,32 @@
+# Default Filter by User
+
+For each model you can specify a custom `__where__` clause that can take an optional Info. If you give an Info, you can then use the user from the request.
+
+```python
+import rhubarb
+from rhubarb import table, column, references
+from rhubarb.errors import PermissionDenied
+
+
+# Filter model by user by default...
+@table
+class SomeModel:
+    name: str = column()
+    user_id = references(MyUserModel)
+
+    def __where__(self, info: Info):
+        user = info.context["request"].user
+        if not user.is_authenticated:
+            raise PermissionDenied
+        elif user.is_staff or user.is_superuser:
+            return True
+        return self.user_id == user.id
+
+
+@rhubarb.type
+class Query:
+    @rhubarb.field(graphql_type=list[SomeModel])
+    def my_field(self, info: Info):
+        # To query SomeModel you must pass an info object now.
+        return query(conn, SomeModel, info=info)
+```

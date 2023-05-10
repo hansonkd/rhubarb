@@ -1,0 +1,44 @@
+# Rhubarb - The Funky Sweet Python Framework Built With Strawberry GraphQL
+
+Rhubarb is an ORM baked from scratch focused on automatic optimizations with Postgres data using GQL.
+
+<br/>
+
+<img width="100%" alt="Rhubarb-Strawberry Pie" src="https://user-images.githubusercontent.com/496914/235881083-f47d21ff-2462-46f9-acc2-e900316fe05f.png"></img>
+
+*Strawberry-Rhubarb Pie... Tasty!*
+
+## Rhubarb at a glance
+
+* Asyncio Native
+* Build SQL Queries with Python
+* Built on GraphQL for optimization layer on nested queries
+* Migrations - Automatically generate Schema changes as your data model updates.
+* Intuitively Solve N+1 without even realizing it
+* Simplify Aggregations / Joins / Subqueries
+* Heavily inspired by Django and built with the philosophy of take the best parts.
+* Native Public / Private Schema dichotomy
+* Pass User and Extra info to use in queries through Strawberry Info's context.
+* Doesn't use any other Python ORM for DB access, only Psycopg3
+
+## Extra Rhubarb Features
+
+Rhubarb comes with some extra integrations to make using the ORM easy...
+
+* HTTP - FastAPI / Starlette
+* Redis - Rate Limiting / Caching
+* Auth - Impersonate / Sessions / Users / WebAuthN / Password
+* Security - CORS / CSRF / Field Level Security / Auth Rate Limits
+* Auditing - Record all Mutations / Queries / Subscriptions / Custom Events
+* Tasks Queue - Chron and one off tasks offloaded to worker processes using arq.
+
+## Automatic SQL Optimizations
+
+Currently, Rhubarb does a few optimizations that cover most uses:
+
+* Selecting only the columns being asked for in the current GQL query
+* Inlining joins that don't produce more rows.
+* Managing exploding cartesian products from m:n joins
+* Pushing Aggregates to Subquery
+* Combining aggregates if they use same `GROUP BY`
+

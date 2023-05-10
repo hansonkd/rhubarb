@@ -1,0 +1,91 @@
+# Rhubarb Basics
+
+Rhubarb is built to make it easy to query data in a Pythonic way. It does this through Python objects that represent SQL operations.
+
+## Tables
+
+Define tables using the `@table` decorator and `column` fields. `virtual_column` are computations that get converted into SQL and run on Postgres.
+
+```python
+from rhubarb import BaseModel, table, column, virtual_column
+from rhubarb.functions import concat
+
+
+@table
+class MyModel(BaseModel):
+    first_name: str = column()
+    last_name: str = column()
+
+    @virtual_column
+    def full_name(self):
+        return concat(self.first_name, " ", self.last_name)
+```
+
+## Schema
+
+Expose your Tables in a GQL Schema by creating a Query.
+
+```python
+import rhubarb
+from rhubarb import Schema, query, get_conn
+
+
+@rhubarb.type
+class Query:
+    @rhubarb.field(graphql_type=list[MyModel])
+    def all_my_models(self, info: Info):
+        return query(get_conn(info), MyModel, info)
+
+
+schema = Schema(
+    query=Query
+)
+```
+
+## ModelSelectors
+
+Rhubarb is built around the `ModelSelector` which wraps your type and converts python operations into SQL functions. Only fields are accessible from this ModelSelector. Extra attributes or functions that aren't fields will not be able to be accessed.
+
+```python
+def where_fn(s: ModelSelector[MyModel]):
+    return (s.first_name == "bob") and (s.last_name == "jones")
+
+
+def select_fn(s: ModelSelector[MyModel]):
+    return s.email
+
+
+query(MyModel, conn).where(where_fn).select(select_fn)
+```
+
+### ModelSelectors and `self`
+
+When you create a `virtual_column`, `field` or `relation` the `self` argument to the function is not the dataclass type, but actually a `ModelSelector` type.
+
+```python
+@table
+class MyModel:
+    @virtual_column
+    def int_is_big(self: ModelSelector[MyModel]) -> bool:
+        return self.example_int_col > 100
+```
+
+### ModelSetters
+
+Like a ModelSelector, the update function has a `ModelSetter` which accumulates the changes you which to make in an UPDATE:
+
+```python
+def set_fn(s: ModelSelector[MyModel]):
+    s.email = "new@example.com"
+
+
+query(MyModel, conn).update(set_fn)
+```
+
+### Using Kwargs Instead
+
+Rhubarb exposes shortcut functions for you to use `**kwargs` to filter and update data also.
+
+```python
+query(MyModel, conn).kw_where(first_name="bob", last_name="jones").kw_update(email="new@example.com")
+```

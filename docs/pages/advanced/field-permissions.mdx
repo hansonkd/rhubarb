@@ -1,0 +1,27 @@
+# Column and Field Permission
+
+You can automatically raise an error if a usr tries to query a field they shouldn't using Strawberry Permission Classes.
+
+```python
+from rhubarb import column
+from rhubarb.permission_classes import IsAuthenticated, IsStaff, IsSuperUser
+
+@table
+class MyModel:
+    tax_id: str = column(permission_classes=[IsStaff])
+
+
+    @field(permission_classes=[IsAuthenticated])
+    def must_be_logged_in(...):
+        pass
+
+
+    @field(permission_classes=[IsStaff])
+    def must_be_staff(...):
+        pass
+
+
+    @field(permission_classes=[IsSuperUser])
+    def must_be_superuser(...):
+        pass
+```

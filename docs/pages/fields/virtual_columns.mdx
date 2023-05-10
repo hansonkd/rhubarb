@@ -1,0 +1,33 @@
+# Virtual Columns
+
+Rhubarb tables are different from standard Python objects. methods decorated with `virtual_column` and `field` are not executed in Python. These methods are pushed down and transformed into SQL to be executed on the Postgres Server.
+
+```python
+from rhubarb import  BaseModel, ModelSelector, column, table, virtual_column
+from rhubarb.functions import concat, case, val
+
+
+@table
+class Person(BaseModel):
+    first_name: str = column()
+    last_name: str = column()
+    favorite_number: int = column()
+    score: int = column()
+
+    @virtual_column
+    def full_name(self: ModelSelector) -> str:
+        return concat(self.first_name, self.last_name)
+
+    @virtual_column
+    def favorite_number_is_42(self: ModelSelector) -> bool:
+        return self.favorite_number == 42
+
+    @virtual_column
+    def case_computation(self: ModelSelector) -> str:
+        return case(
+            (self.score == 0, val("Bad")),
+            (self.score < 5, val("Poor")),
+            (self.score < 7, val("Good")),
+            default=val("Excellent")
+        )
+```

@@ -5,7 +5,7 @@ from typing import Callable, Type, Any, Awaitable, Optional, Self
 from rhubarb.core import SqlModel, T, UNSET, DEFAULT_SQL_FUNCTION, Unset
 from rhubarb.errors import RhubarbException
 from rhubarb.object_set import (
-    SQLBuilder,
+    SqlBuilder,
     SqlType,
     DEFAULT_REGISTRY,
     ColumnField,
@@ -191,7 +191,7 @@ class CreateColumn(AlterOperation):
     default: DEFAULT_SQL_FUNCTION | None = None
     references: FrozenReference = None
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(f"ADD COLUMN {self.name} {self.type.sql}")
         if self.type.optional:
             builder.write(" NULL")
@@ -228,7 +228,7 @@ class CreateColumn(AlterOperation):
 class DropColumn:
     name: str
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(f"DROP COLUMN {self.name}")
 
     def alter(self, table):
@@ -243,7 +243,7 @@ class AlterTypeUsing:
     new_type: SqlType
     using: str | None = None
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(f"ALTER {self.name} TYPE ")
         self.new_type.__sql__(builder)
         if self.using is None:
@@ -266,7 +266,7 @@ class SetDefault:
     type: SqlType
     default: DEFAULT_SQL_FUNCTION | None = None
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(f"ALTER {self.name} SET ")
         default = self.default
         if isinstance(default, str):
@@ -287,7 +287,7 @@ class SetDefault:
 class DropDefault:
     name: str
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(f"ALTER {self.name} DROP DEFAULT")
 
     def alter(self, table):
@@ -303,7 +303,7 @@ class AddConstraint:
     constraint_name: str
     constraint: "MigrationConstraint"
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(
             f"ADD CONSTRAINT {self.constraint_name} {self.constraint.modifier} ({self.constraint.check})"
         )
@@ -318,7 +318,7 @@ class AddConstraint:
 class DropConstraint:
     constraint_name: str
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(f"DROP CONSTRAINT {self.constraint_name}")
 
     def alter(self, table: MigrationStateTable):
@@ -334,7 +334,7 @@ class AddIndex:
     index: "MigrationIndex"
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
-        builder = SQLBuilder(dml_mode=True)
+        builder = SqlBuilder(dml_mode=True)
 
         unique = ""
         if self.index.unique:
@@ -366,7 +366,7 @@ class RenameIndex:
     table_name: (str, str)
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
-        builder = SQLBuilder()
+        builder = SqlBuilder()
         builder.write(f"ALTER INDEX {self.old_index_name} RENAME TO {self.index_name}")
         await conn.execute(builder.q)
 
@@ -386,7 +386,7 @@ class DropIndex:
     index_name: str
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
-        builder = SQLBuilder()
+        builder = SqlBuilder()
         builder.write(f"DROP INDEX {self.index_name}")
         await conn.execute(builder.q)
 
@@ -405,7 +405,7 @@ class AddReferencesConstraint:
     constraint_name: str
     references: FrozenReference
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(
             f"ADD CONSTRAINT {self.constraint_name} FOREIGN KEY ({self.name}) REFERENCES {self.references.table_name}"
         )
@@ -441,7 +441,7 @@ class MigrationIndex:
 
     @classmethod
     def from_index(cls, idx: Index):
-        builder = SQLBuilder(dml_mode=True)
+        builder = SqlBuilder(dml_mode=True)
         builder.write("(")
         if isinstance(idx.on, tuple):
             on_cols = idx.on
@@ -483,7 +483,7 @@ class MigrationConstraint:
 
     @classmethod
     def from_constraint(cls, cst: Constraint):
-        builder = SQLBuilder(dml_mode=True)
+        builder = SqlBuilder(dml_mode=True)
         cst.check.__sql__(builder)
         if builder.vars:
             raise RhubarbException(
@@ -507,7 +507,7 @@ class CreateTable(MigrationOperation):
     indexes: dict[str, MigrationIndex] = dataclasses.field(default_factory=dict)
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
-        builder = SQLBuilder(dml_mode=True)
+        builder = SqlBuilder(dml_mode=True)
         builder.write(f"CREATE TABLE {self.name} (")
         wrote_val = False
         for column in self.columns:
@@ -550,7 +550,7 @@ class CreateTable(MigrationOperation):
         await conn.execute(builder.q)
 
         for index_name, index in self.indexes.items():
-            builder = SQLBuilder()
+            builder = SqlBuilder()
             unique = ""
             if index.unique:
                 unique = "UNIQUE "
@@ -604,7 +604,7 @@ class RenameTable(MigrationOperation):
     new_class_name: str
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
-        builder = SQLBuilder()
+        builder = SqlBuilder()
         builder.write(f'ALTER TABLE "{self.name}" RENAME TO {self.new_name}')
         await conn.execute(builder.q)
 
@@ -628,7 +628,7 @@ class RenameColumn(MigrationOperation):
     new_python_name: str
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
-        builder = SQLBuilder()
+        builder = SqlBuilder()
         builder.write(
             f'ALTER TABLE "{self.name}" RENAME COLUMN {self.old_column_name} TO {self.new_column_name}'
         )
@@ -657,7 +657,7 @@ class AlterTable(MigrationOperation):
     alter_operations: list[AlterOperations]
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
-        builder = SQLBuilder()
+        builder = SqlBuilder()
         builder.write(f'ALTER TABLE "{self.name}" ')
         wrote_val = False
         for op in self.alter_operations:

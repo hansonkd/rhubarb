@@ -1,0 +1,20 @@
+## Making Multiple Selections without Graphql
+
+Using the Models through a GQL schema will automatically inline and combine relations. To get the same functionality, when manually using `query` outside of GQL, you will need to return a dataclass from `select` with all the data you want to return.
+
+```python
+import dataclasses
+
+
+@dataclasses.dataclass
+class R:
+    author: Author
+    book: Book
+
+
+# Query author and book at the same time.
+q = query(conn, Book).select(lambda book: R(book=book, author=book.author()))
+result: list[R] = await q.as_list()
+```
+
+Dataclasses are used instead of Tuples because there is no Tuple type in GQL.

@@ -118,7 +118,15 @@ async def do_log_gql_event(
     await log_event(conn, **kwargs)
 
 
-async def log_event(conn, request: HTTPConnection = None, **kwargs):
+async def log_event(conn=None, request: HTTPConnection = None, **kwargs):
+    if conn is None:
+        async with audit_connection() as conn:
+            return await do_log_event(conn=conn, request=request, **kwargs)
+    else:
+        return await do_log_event(conn=conn, request=request, **kwargs)
+
+
+async def do_log_event(conn, request: HTTPConnection = None, **kwargs):
     if request:
         kwargs.setdefault("resource_url", str(request.url))
         kwargs.setdefault("ip", request.client.host)

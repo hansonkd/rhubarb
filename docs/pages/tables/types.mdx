@@ -1,0 +1,28 @@
+# Built-in Column / Sql Types
+
+When creating tables, refer to this Guide about the mappings between Python Type and Postgres Type
+
+| Python        | Postgres | Notes |
+| :------------ | :---------: | :---------: |
+| bool         |    BOOLEAN    | |
+| int         |    BIGINT    | |
+| float         |    FLOAT    | |
+| decimal.Decimal         |    DECIMAL    | |
+| str         |    TEXT    | |
+| bytes         |    BYTEA    | |
+| datetime.datetime         |    TIMESTAMPTZ    | |
+| datetime.date         |    DATE    | |
+| uuid.UUID         |    UUID    | |
+| typing.Optional         |    Null columns    | |
+| rhubarb.PhoneNumber         |    TEXT    | decodes as phonenumbers.PhoneNumber |
+| rhubarb.Email         |    TEXT    | Wraps str |
+| dict        |    JSONB    | |
+| list        |    JSONB    | |
+| strawberry.scalars.JSON        |    JSONB    | |
+| strawberry.scalars.Base64        |    BYTEA    | decodes as str |
+| strawberry.scalars.Base32        |    BYTEA    | decodes as str |
+| strawberry.scalars.Base16        |    BYTEA    | decodes as str |
+| rhubarb.core.Binary        |    BYTEA    | decodes as bytes |
+| rhubarb.core.Serial         |    SERIAL    | |
+| None         |    NULL    | cannot use as column type, only value |
+

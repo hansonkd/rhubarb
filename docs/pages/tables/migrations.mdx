@@ -1,0 +1,159 @@
+# Migrations
+
+Rhubarb has basic support for migrations. It will watch for new, changed columns and tables.
+
+## Migration Commands
+Make migrations with:
+
+```bash
+python -m rhubarb.migrations.cmd.make
+```
+
+Apply migrations with
+
+```bash
+python -m rhubarb.migrations.cmd.apply
+```
+
+Drop all Tables
+
+```bash
+python -m rhubarb.migrations.cmd.reset
+```
+
+## Migration Basics
+
+You can manage migrations with Registries. A registry is a group of models that can include other registries. This allows you include apps with collections of models in your app.
+
+By default there is a DEFAULT_REGISTRY that all models will be associated with unless otherwise specified. In general if you are creating your models that will run as your main app, you can use `DEFAULT_REGISTRY`, but the options are there to customize. If you do want to use a different registry as your main registry of your app, set `Config.registry`
+
+```python
+from rhubarb import DEFAULT_REGISTRY, Registry, BaseModel, table
+
+# You can link other registries to your registry, this is useful for other plugins or libs.
+DEFAULT_REGISTRY.link(third_party_registry)
+
+
+# Go to default registry
+@table
+class SomeTable(BaseModel):
+    pass
+
+# Go to your specific registry
+@table(registry=registry)
+class MyTable(BaseModel):
+    pass
+
+
+# Don't include in migrations...
+@table(skip_registry=True)
+class OtherTable(BaseModel):
+    pass
+```
+
+
+## Indexes and Constraints
+
+Indexes and constraints are returned with the `__indexes__` and `__constraints__` function. Rhubarb will monitor if these change by their key and generate migrations if needed.
+
+```python
+from rhubarb import BaseModel, column, table, Index, Constraint
+from rhubarb.functions import concat
+
+
+@table
+class Person(BaseModel):
+    first_name: str = column()
+    last_name: str = column()
+    favorite_number: int = column()
+    least_favorite_number: int = column()
+
+    def __indexes__(self):
+        return {
+            "by_last_name_comma_first": Index(
+                on=concat(self.last_name, ",", self.first_name)
+            ),
+            "by_favorite_number": Index(
+                on=self.favorite_number
+            )
+        }
+
+    def __constraints__(self):
+        return {
+            "favorite_ne_least_favorite": Constraint(
+                check=self.favorite_number != self.least_favorite_number
+            )
+        }
+```
+
+You can add a `DEFAULT` to a column with `sql_default`. Only some SQL functions are supported in order to preserve serialization functionality with Migrations for now.
+
+```python
+import uuid
+import datetime
+from rhubarb import BaseModel, column, table
+
+
+@table
+class AwesomeTable(BaseModel):
+    some_uuid: uuid.UUID = column(sql_default="generate_uuid_v4()")
+    some_datetime: datetime.datetime = column(sql_default="now()")
+```
+
+
+## Running Python in Migrations
+
+If you want to run a data migration and you need to run python, then generate migrations with `--empty`, and add  `RunPython` to the operations list.
+
+```bash
+python -m rhubarb.migrations.cmd.make --empty
+```
+With RunPython, you get a snapshot of table instances with only concrete fields (no virtual columns or relationships). If you need a computation, redefine it inside the migration so that when you code changes, your migration will always stay the same.
+
+```python
+from rhubarb import migrations
+from rhubarb import query, save, table, virtual_column, relation, update
+
+
+async def mig_fn(info: migrations.MigrationInfo):
+    RatingModel = info.get_model("ratingmodel")
+    ReviewerModel = info.get_model("reviewermodel")
+
+    # manually iterate, or just use normal CRUD functions...
+    objs = await query(info.conn, RatingModel).as_list()
+    for obj in objs:
+        obj.rating += 10
+        await save(info.conn, obj).execute()
+
+    # Also, you can create virtual models and use their fields.
+    # Because they are defined inside the migration, they are safe from changes in the app.
+    @table(skip_registry=True)
+    class MigRatingModel(RatingModel):
+        @virtual_column
+        def inflated(self) -> int:
+            return self.rating + 10
+
+        @relation
+        def reviewer(self, reviewer: ReviewerModel):
+            return self.reviewer_id == reviewer.id
+
+    # Do an update using the fields and relations
+    def set_fn(m):
+        m.rating = m.inflated()
+
+    def where_fn(m):
+        return m.reviewer().email == "some@example.com"
+
+    await update(info.conn, MigRatingModel, set_fn, where_fn).execute()
+
+
+
+def migrate():
+    return migrations.Migration(
+        id="migration_20230426-034718",
+        depends_on=[...],
+        operations=[
+            migrations.RunPython(mig_fn)
+        ]
+    )
+```

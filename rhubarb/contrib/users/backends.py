@@ -5,11 +5,12 @@ import uuid
 
 from psycopg import AsyncConnection
 from rhubarb.config import config
+from rhubarb.contrib.audit.models import log_event
 from rhubarb.contrib.redis.rate_limit import rate_limit
 from starlette.authentication import (
     AuthenticationBackend,
     AuthenticationError,
-    AuthCredentials,
+    AuthCredentials, UnauthenticatedUser,
 )
 from starlette.requests import HTTPConnection
 
@@ -33,6 +34,7 @@ async def login(conn: AsyncConnection, user: U, request: HTTPConnection) -> U:
         request.session["user_id"] = user.id
     else:
         raise RhubarbException(f"Cannot login {user} because it doesn't have an id")
+    await log_event(request=request, event_name="login")
     user.last_login = datetime.datetime.utcnow()
     return await save(conn, user).execute()
 
@@ -47,3 +49,13 @@ async def try_login_with_pw(conn: AsyncConnection, username: uuid.UUID, candidat
                 if u.password.check(candidate_pw):
                     return await login(conn, u, request)
         return None
+
+
+async def logout(request: HTTPConnection):
+    if request.user.is_authenticated:
+        del request.session["user_id"]
+        if "impersonator_id" in request.session:
+            del request.session["impersonator_id"]
+        request.scope["auth"] = AuthCredentials()
+        request.scope["user"] = UnauthenticatedUser()
+        await log_event(request=request, event_name="logout")

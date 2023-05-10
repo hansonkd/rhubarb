@@ -1,0 +1,163 @@
+# Querying Data
+
+You can either use a Strawberry Schema or use the Model directly.
+
+## Using GQL in Python as Client
+
+We can use our schema to make queries and Rhubarb will optimize them for you.
+
+```python
+from rhubarb.contrib.postgres.connection import connection
+
+async with connection() as conn:
+    res = await schema.execute(
+        """
+        query {
+            all_people {
+                name
+                int_is_big
+                a_bool_column
+                other_table {
+                    id
+                    info
+                }
+            }
+        }
+        """,
+        context_value={"conn": conn}
+    )
+```
+
+## Without GQL
+
+You can also make queries  like a normal ORM for use in general Python apps and tasks.
+
+```python
+from rhubarb import query, Desc
+from rhubarb.contrib.postgres.connection import connection
+
+async with connection() as conn:
+    bool_list: list[bool] = await query(conn, Person).select(lambda x: x.int_is_big()).as_list()
+```
+
+## Cheat Sheet
+
+Below is a quick reference for building sets of data.
+
+### ObjectSet / UpdateSet / DeleteSet
+
+ObjectSet, UpdateSet, and DeleteSet are lazily built up. An ObjectSet can be converted to an UpdateSet or DeleteSet by calling `.update` or `.delete`.
+
+```python
+import datetime
+from rhubarb.crud import query, by_kw, by_pk, save, insert_objs, reload
+
+# Use keywords
+query(conn, Person).kw_where(username="my_username")
+by_kw(conn, Person, username="my_username")
+by_kw(conn, Person, created__lt=datetime.datetime.now() - datetime.timedelta(1))
+by_kw(conn, Person, created__lte=datetime.datetime.now() - datetime.timedelta(1))
+by_kw(conn, Person, created__gt=datetime.datetime.now() - datetime.timedelta(1))
+by_kw(conn, Person, created__gte=datetime.datetime.now() - datetime.timedelta(1))
+
+
+# Get an object by Primary Key
+by_pk(conn, Person, "4fdd6a2d-ff49-41b6-b92a-dc05beb67298")
+by_pk(conn, Person, "4fdd6a2d-ff49-41b6-b92a-dc05beb67298")
+
+# Updating
+by_kw(conn, Person, username="my_username").kw_update(email="new_email@example.com")
+query(conn, Person).kw_update(email="some@example.com", active=True)
+save(conn, exising_person)
+# Update with a function, lets you use fields.
+def set_fn(person):
+    person.email = person.verification().email
+    person.active = True
+
+def where_fn(person):
+    return is_not_null(person.verification().completed)
+
+query(conn, Person).where(where_fn).update(set_fn)
+update(conn, Person, set_fn, where_fn)
+
+
+# Deleting
+query(conn, Person).kw_where(username="my_username").delete()
+query(conn, Person).where(lambda x: x.username == "my_username").delete()
+delete(conn, Person, lambda x: x.username == "my_username")
+
+# Insert an object
+save(conn, Person(email="user@example.com"))
+# Insert many objects
+insert_objs(conn, Person, [Person(email="user@example.com"), Person(email="user2@example.com")])
+
+# Reload an object from the db
+reload(conn, existing_person)
+
+# limit results
+query(conn, Person).limit(1)
+# Order
+query(conn, Person).order_by(lambda x: x.updated)
+query(conn, Person).order_by(lambda x: Desc(x.updated)) # Descend
+query(conn, Person).order_by(lambda x: (Asc(x.birthday), Desc(x.updated))) # Mix and match
+query(conn, Person).order_by(lambda x: x.updated).limit(1)
+
+# Prepare a result set to indicate that only one row will be returned.
+update(conn, Person, do, where) # will return a list when `execute` is called
+update(conn, Person, do, where, one=True)  # will return one or None rows when `execute` is called
+query(conn, Person) # will return a list when `resolve` is called
+query(conn, Person, one=True) # will return one or None rows when `resolve` is called
+```
+
+## Executing Queries
+
+To run the queries on Postgres, we need to call their appropriate method.
+
+```python
+from rhubarb.crud import query, save, insert_objs
+
+# Executing Object sets
+await query(conn, Person).one() # return the result (one or none)
+await query(conn, Person).as_list() # return the result (list)
+await query(conn, Person, one=one_or_many).resolve() # return the result (dependent on `one` kwarg passed to query)
+
+# Executing Mutations
+await insert_objs(conn, Person, ...).execute() # Execute and return list
+await insert_objs(conn, Person, ...).execute(one=True) # Execute and return first object
+await save(conn, Person(...)).execute() # Execute and return one object
+await query(conn, Person).update(...).execute() # Execute and return list
+await query(conn, Person, one=True).update(...).execute() # Execute and return one or none objects
+await query(conn, Person, one=True).delete().execute() # Execute and return one or none objects
+await query(conn, Person).update(...).execute(one=True) # Execute and return one or none objects
+```
+
+## ObjectSet and Cached Results
+
+An ObjectSet will cache results once `as_list` / `resolve` / `one` is called.
+
+```python
+q = query(conn, Person) # No query performed
+l: list[Person] = q.as_list() # Query performed the first time.
+l: list[Person] = q.as_list() # No query performed the second time.
+p: Optional[Person] = q.by_pk("123") # No query performed, get specific object from its cache.
+```
+
+## Find or Create
+
+Attempt to find the record by kw, if not, insert the object.
+
+```python
+from rhubarb.crud import find_or_create
+
+obj = await find_or_create(conn, Person(email="user@example.com"), email="user@example.com")
+```
+
+## Counting / Exists
+
+Count the rows or tell if any rows exists. These will do new queries and do not cache results.
+
+```python
+await query(conn, Person).count() # Executes a COUNT(*) and returns an int
+await query(conn, Person).exists() # Executes a SELECT TRUE LIMIT 1 and returns an bool
+```
+

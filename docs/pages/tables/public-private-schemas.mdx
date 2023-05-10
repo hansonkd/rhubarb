@@ -1,0 +1,51 @@
+# Supporting Public and Private Schemas
+
+While you can expose your Schema on FastAPI directly, and that may be beneficial for internal use, but for the public users, you do not want all your DB Columns exposed.
+
+Simply create a new schema using standard `type` and `field` exposing only the fields you want from the underlying object exposed.
+
+For example if we use the [table basics example](/tables/table_basics/) that has a lot of fields, we can create another schema that will be served to the public based on the more complicated private schema.
+
+```python
+import rhubarb
+from rhubarb import Schema, ObjectSet, RhubarbExtension, get_conn, query
+from strawberry.types import Info
+from strawberry.scalars import Base64
+
+
+@rhubarb.type
+class TableWithoutSuperClass:
+    info: str
+
+
+
+@rhubarb.type
+class PublicPerson:
+    name: str
+    # If you are exposing public APIs, better to serialize the Binary fields as Base64
+    example_bytes_col: Base64
+
+    @rhubarb.field
+    def other_table(self) -> TableWithoutSuperClass:
+        return self.other_table()
+
+    @rhubarb.field
+    def int_is_big(self) -> bool:
+        return self.int_is_big()
+
+
+@rhubarb.type
+class PublicQuery:
+    # Do the query on the Private type and return an ObjectSet, but make the GQL type a Public type instead.
+    @rhubarb.field(graphql_type=list[PublicPerson])
+    def public_people(self, info: Info) -> ObjectSet[Person, Person]:
+        return query(get_conn(info), Person, info).where(lambda x: x.example_int_col > 10)
+
+
+public_schema = Schema(
+    query=PublicQuery,
+    extensions=[
+        RhubarbExtension
+    ]
+)
+```

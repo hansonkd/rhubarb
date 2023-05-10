@@ -1,0 +1,7 @@
+{
+  "virtual_columns": "Virtual Columns and Fields",
+  "relations": "Relations and References to other Models",
+  "mutations": "Mutations",
+  "aggregations": "Aggregations",
+  "python-based-fields": "Computations in Python"
+}

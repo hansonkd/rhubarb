@@ -225,7 +225,7 @@ async def test_current_user_impersonate(
     assert data["data"]["current_user"]["id"] == str(user.id)
 
     events: list[AuditEvent] = await query(postgres_connection, AuditEvent).as_list()
-    assert len(events) == 3
+    assert len(events) == 4
     assert events[-2].event_name == ImpersonateEvent.START_IMPERSONATING.value
     assert events[-2].user_id == superuser.id
 
@@ -243,7 +243,7 @@ async def test_current_user_impersonate(
     assert data["data"]["other_mutation"]
 
     events: list[AuditEvent] = await query(postgres_connection, AuditEvent).as_list()
-    assert len(events) == 4
+    assert len(events) == 5
     assert events[-1].event_name == "OtherMutation"
     assert events[-1].user_id == user.id
     assert events[-1].impersonator_id == superuser.id
@@ -262,7 +262,7 @@ async def test_current_user_impersonate(
     assert data["data"]["stop_impersonating"]
 
     events: list[AuditEvent] = await query(postgres_connection, AuditEvent).as_list()
-    assert len(events) == 6
+    assert len(events) == 7
     assert events[-2].event_name == ImpersonateEvent.STOP_IMPERSONATING.value
 
     res = await async_http_client.post(

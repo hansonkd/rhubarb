@@ -16,7 +16,7 @@ class IsAuthenticated(BasePermission):
 
 
 class IsSuperUser(BasePermission):
-    message = "User is not authenticated"
+    message = "User is not superuser"
 
     def has_permission(self, source: typing.Any, info: Info, **kwargs) -> bool:
         request: typing.Union[Request, WebSocket] = info.context["request"]
@@ -29,7 +29,7 @@ class IsSuperUser(BasePermission):
 
 
 class IsStaff(BasePermission):
-    message = "User is not authenticated"
+    message = "User is not staff"
 
     def has_permission(self, source: typing.Any, info: Info, **kwargs) -> bool:
         request: typing.Union[Request, WebSocket] = info.context["request"]

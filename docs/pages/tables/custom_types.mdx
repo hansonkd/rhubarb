@@ -1,0 +1,43 @@
+# Built-in Column / Sql Types
+
+You can create your own Postgres Type by using Strawberry custom scalars. The scalars base type must already be a built in type (see the example of rhubarb.core.Email) or wrap a new type.serialize
+
+If you want to have a new type that isn't a builtin, you must implement `__sql_type__` and `__sql__`.
+
+## Example
+
+In this example, we use the JSONB Postgres type to store a custom dataclass:
+
+```python
+from typing import NewType
+import dataclasses
+from rhubarb import SqlType, SqlBuilder
+from strawberry import scalar
+
+
+json_sql_type = SqlType.from_python(dict)
+
+
+@dataclasses.dataclass
+class MyCustomType:
+    a: int
+    b: str
+    o: list[int]
+
+    @staticmethod
+    def __sql_type__():
+        return json_sql_type
+
+    def __sql__(self, builder: SqlBuilder):
+        builder.write_value(self.serialize(), json_sql_type)
+
+    def serialize(self):
+        return dataclasses.asdict(self)
+
+
+CustomType = scalar(
+    NewType("CustomType", MyCustomType),
+    serialize=lambda v: v.serialize(),
+    parse_value=lambda v: MyCustomType(**v),
+)
+```

@@ -1,0 +1,74 @@
+# Install
+
+[Poetry](https://python-poetry.org/) is the preferred way to manage a Rhubarb App.
+
+```bash
+poetry new rhubarb-demo
+cd rhubarb-demo
+poetry add rhubarb
+```
+
+Create a minimal app at `rhubarb-demo/app.py`
+
+```python
+import rhubarb
+from rhubarb import Schema, BaseModel, table, column, query, get_conn
+from rhubarb.contrib.starlette.asgi import GraphQL
+from starlette.applications import Starlette
+from starlette.routing import Route
+from strawberry.types import Info
+
+
+@table
+class MyModel(BaseModel):
+    first_name: str = column()
+    last_name: str = column()
+
+
+@rhubarb.type
+class Query:
+    @rhubarb.field(graphql_type=list[MyModel])
+    def all_my_models(self, info: Info):
+        return query(get_conn(info), MyModel, info)
+
+
+schema = Schema(
+    query=Query
+)
+
+app = Starlette(
+    routes=[Route("/graphql/", GraphQL(schema, debug=True))],
+)
+```
+
+Run a docker compose file if necessary for Redis and Postgres.
+
+```yaml
+services:
+  postgres:
+    image: postgres:alpine
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    ports:
+      - 5435:5432
+    restart: on-failure:3
+  redis:
+    image: redis:latest
+    ports:
+      - 6379:6379
+```
+
+Create and apply migrations for your app.
+
+```bash
+poetry run python -m rhubarb.migrations.cmd.make
+poetry run python -m rhubarb.migrations.cmd.apply
+```
+
+Run your app:
+
+```bash
+uvicorn rhubarb-demo.app:app
+```

@@ -1,0 +1,156 @@
+# User Models and Authentication
+
+Rhubarb comes with builtin User models and helper methods to make it easy to secure and organize your app for your end users.
+
+## Setup
+
+By default you must define your own user model that extends the `User` superclass and link the user registry to your migrations.
+
+```python
+from rhubarb import DEFAULT_REGISTRY, table, column
+from rhubarb.contrib.users.models import User, user_registry
+
+DEFAULT_REGISTRY.link(user_registry)
+
+
+# Add your own user.
+@table
+class MyUser(User):
+    awesome_custom_field: int = column()
+```
+
+Update your app's config to reflect the new user model, this will allow auditing and other plugins to make the correct references.
+
+```python
+config = Config(
+    users=UserConfig(
+        user_model=MyUser
+    )
+)
+```
+
+In your HTTP Server you will have to add the Session and Authentication Middlewares
+
+```python
+app = Starlette(
+    middleware=[
+        Middleware(SessionMiddleware),
+        Middleware(SessionAuthenticationMiddleware),
+    ],
+    routes=[Route("/graphql/", GraphQL(schema))],
+)
+```
+
+## Logging In
+
+Force a login without checking password.
+```python
+user = await get_user(conn, user_id)
+await login(conn, user, info.context["request"])
+```
+
+Check a user's password and log them in if it matches. This is rate limited by IP.
+
+```python
+await try_login_with_pw(conn, user_id, password, info.context["request"])
+```
+
+## Logging Out
+
+```python
+await logout(info.context["request"])
+```
+
+## Checking Logged-In Users
+
+After logging in, you can access the user from the request in Info's context.
+
+```python
+@rhubarb.type
+class Query:
+    @rhubarb.field
+    def current_user(self, info: Info) -> MyUser | None:
+        if info.context["request"].user.is_authenticated:
+            return info.context["request"].user
+        return None
+```
+
+## Complete
+
+Here is an example putting git all together
+
+```python
+import uuid
+
+import rhubarb
+from rhubarb import Schema, Registry, table, get_conn
+from rhubarb.config import Config
+from rhubarb.contrib.users.models import User, user_registry, get_user
+from rhubarb.contrib.users.backends import login
+from rhubarb.contrib.users.config import UserConfig
+from rhubarb.contrib.users.middleware import SessionAuthenticationMiddleware
+from rhubarb.contrib.sessions.middleware import SessionMiddleware
+from rhubarb.contrib.starlette.asgi import GraphQL
+
+from strawberry.types import Info
+from starlette.applications import Starlette
+from starlette.routing import Route
+from starlette.middleware import Middleware
+
+
+migrations_registry = Registry()
+# Link the user registry for supporting models.
+migrations_registry.link(user_registry)
+
+
+# Add your own user.
+@table(registry=migrations_registry)
+class MyUser(User):
+    pass
+
+
+@table(registry=migrations_registry)
+class CustomModel:
+    pass
+
+
+
+config = Config(
+    registry=migrations_registry,
+    users=UserConfig(
+        user_model=MyUser
+    )
+)
+
+
+@rhubarb.type
+class Query:
+    @rhubarb.field
+    def current_user(self, info: Info) -> MyUser | None:
+        if info.context["request"].user.is_authenticated:
+            return info.context["request"].user
+        return None
+
+
+@rhubarb.type
+class Mutation:
+    @rhubarb.mutation
+    async def login(self, user_id: uuid.UUID, info: Info) -> MyUser:
+        conn = get_conn(info)
+        user = await get_user(conn, user_id)
+        return await login(conn, user, info.context["request"])
+
+
+schema = Schema(
+    query=Query,
+    mutation=Mutation,
+)
+
+app = Starlette(
+    middleware=[
+        Middleware(SessionMiddleware),
+        Middleware(SessionAuthenticationMiddleware),
+    ],
+    routes=[Route("/graphql/", GraphQL(schema, debug=True))],
+)
+```

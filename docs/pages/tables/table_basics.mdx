@@ -1,0 +1,68 @@
+# Creating Tables
+
+Tables are mapped from Postgres to Python through Strawberry datatypes. Each column that is in your DB can be loaded into the datatype through the `column()` field type.
+
+The following special class attributes are used to define the table's relation to Postgres
+
+| Python        | Postgres |
+| :------------ | :---------: |
+| `__schema__`    |    What schema to use that contains the model   |
+| `__table__`     |    Postgres Table Name   |
+| `__pks__`       |    what field or tuple of fields to use for primary key   |
+
+
+```python
+import decimal
+import datetime
+import uuid
+from typing import Optional
+from rhubarb import Schema, ObjectSet, ModelSelector, BaseModel, column, table, type, \
+    field, get_conn, query, references, relation, virtual_column, Binary
+from strawberry.scalars import JSON
+from strawberry.types import Info
+
+
+@table
+class TableWithoutSuperClass:
+    __schema__ = "public"
+    __table__ = "my_awesome_table"
+    __pks__ = "id"
+    id: int = column()
+    info: str = column()
+
+
+
+@table
+class Person(BaseModel):
+    name: str = column()
+    some_uuid: Optional[uuid.UUID] = column(sql_default="generate_uuid_v4()")
+    a_bool_column: bool = column(column_name="awesome_custom_column_name")
+    example_dt_col: datetime.datetime = column(sql_default="now()")
+    example_date_col: datetime.date = column()
+    example_float_col: float = column()
+    example_int_col: int = column()
+    example_decimal_col: decimal.Decimal = column()
+    example_bytes_col: Binary = column()
+    example_jsonb_col: JSON = column()
+
+    other_table_reference_id: int = references(TableWithoutSuperClass.__table__)
+
+    @relation
+    def other_table(self, other: TableWithoutSuperClass):
+        return self.other_table_reference_id == other.id
+
+    @virtual_column
+    def int_is_big(self) -> bool:
+        return self.example_int_col > 100
+
+@type
+class Query:
+    @field(graphql_type=list[Person])
+    def all_people(self, info: Info) -> ObjectSet[Person, Person]:
+        return query(get_conn(info), Person, info)
+
+
+schema = Schema(
+    query=Query
+)
+```

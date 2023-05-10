@@ -9,6 +9,7 @@ from rhubarb.object_set import (
     Computed,
     Case,
     Value,
+    RawSQL,
     UseSelector,
     func,
 )
@@ -79,6 +80,10 @@ def case(*whens: tuple[Selector[bool], Selector[V]], default: Selector[V] = None
 
 def val(v: Any):
     return Value(v)
+
+
+def raw(v: Any):
+    return RawSQL(v)
 
 
 def agg(ms: ModelSelector, fn: str, *args: Selector, infixed=False):

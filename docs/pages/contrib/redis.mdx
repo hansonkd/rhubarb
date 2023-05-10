@@ -1,0 +1,91 @@
+# Redis
+
+Rhubarb has built in integrations with Redis for caching, ratelimiting and pubsub.
+
+## General usage
+
+You can get a redis connection from the currently configured pool with `from rhubarb.contrib.redis.connection import connection` and use it like normal.
+
+```python
+from rhubarb.contrib.redis.connection import connection
+
+async def use_redis():
+    async with connection() as r:
+        await r.set("some_key", "some_value")
+        return await r.get("some_key")
+```
+
+## Caching
+
+Rhubarb has builtin support for caching function results in Redis.
+
+```python
+from rhubarb.contrib.redis.cache import cache, local_cache, local_only_cache, clear_cache
+
+import aiohttp
+
+# Cache a function in Redis for a minute
+@cache(ttl_seconds=60)
+async def cached_fn():
+        resp = await aiohttp.get("http://example.com")
+        return resp.json()
+
+# Cache a function locally and in Redis. On Read, prioritize local memory.
+@local_cache(ttl_seconds=60)
+async def cached_fn():
+        resp = await aiohttp.get("http://example.com")
+        return resp.json()
+
+
+# Cache a function locally only.
+@local_only_cache(ttl_seconds=60)
+async def local_only_cache():
+    resp = await aiohttp.get("http://example.com")
+    return resp.json()
+```
+
+### Clear the cache
+
+Clear a function's cache by passing the decorated function into `clear_cache`
+
+```python
+await clear_cache(cached_fn)
+```
+
+### A note about Local Caching
+
+Be careful, clearing cache with local if your app is distributed. Clearing a local cache will only clear the local cache on the current machine. Therefore `local_cache` and `local_only_cache` should only be used with data that doesn't get stale (i.e. immutable data)
+
+## Rate limiting
+
+Rhubarb has built-in a rate limit context manager and decorator. It is synchronized by Redis so can be used in distributed apps to secure parts of the code from bad actors.
+
+```python
+from starlette.requests import Request
+from rhubarb.contrib.redis.rate_limit import rate_limit
+
+
+# Rate limit by IP. Once a minute.
+async def once_a_minute(request: Request):
+    with rate_limit(key=f"my_action-{request.client.host}", max_times=1, ttl_seconds=60):
+        return await some_other_function()
+
+
+# Rate limit as a decorator (this ratelimit would use the same key for all users).
+@rate_limit(key=f"my_action", max_times=1, ttl_seconds=60)
+async def once_a_minute():
+    return await some_other_function()
+```
+
+## Config
+
+```python
+@dataclasses.dataclass(frozen=True)
+class RedisConfig:
+    host: str = str_env("REDIS_HOST", "127.0.0.1")
+    port: int = int_env("REDIS_PORT", 6379)
+    username: Optional[str] = str_env("REDIS_USERNAME", None)
+    password: Optional[str] = str_env("REDIS_PASSWORD", None)
+    db: int = int_env("REDIS_DB", 0)
+    max_connections: Optional[int] = int_env("REDIS_MAX_CONNECTIONS")
+```

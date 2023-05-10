@@ -9,7 +9,7 @@ from rhubarb.config import config
 
 
 async def send(
-    message: EmailMessage, sender: str | None, recipients: str | Sequence[str] | None
+    message: EmailMessage, sender: str | None = None, recipients: str | Sequence[str] | None = None
 ) -> tuple[dict[str, SMTPResponse], str]:
     conf = config()
     kwargs = dataclasses.asdict(conf.email)

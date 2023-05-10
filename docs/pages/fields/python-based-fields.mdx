@@ -1,0 +1,71 @@
+# Computations executed in Python
+
+Sometimes you may not want to have all your computations be in SQL. If you want a table method to execute in Python, use the `python_field`.
+
+`python_field` takes a function which you use to list your dependencies for the computation. This allows you to specify any other SQL computation or column to feed into your function.
+
+
+## Example
+
+Here, we pass in a lambda which takes a `ModelSelector` that we can use to specify what SQL fields we will need to do the computation in Python.
+
+Note that `self` in a `python_field` is still a `ModelSelector` and not the Python object.
+
+```python
+@python_field(lambda x: [x.first_name, x.last_name])
+def full_name_python(self, first_name: str, last_name: str) -> str:
+    return f"{first_name} {last_name}"
+```
+
+Here is a bigger example:
+
+
+```python
+import uuid
+from rhubarb import BaseModel, column, table, relation, python_field, virtual_column
+from rhubarb.functions import concat
+
+
+@table
+class Address(BaseModel):
+    city: str = column()
+    state: str = column()
+    person_id: uuid.UUID = column()
+
+
+@table
+class Person(BaseModel):
+    first_name: str = column()
+    last_name: str = column()
+    favorite_pokemon: int = column()
+
+    @relation
+    def address(self, address: Address):
+        return self.id == address.person_id
+
+    # Executed in SQL so need to use special SQL function.
+    @virtual_column
+    def full_name_sql(self) -> str:
+        return concat(self.first_name, " ", self.last_name)
+
+    # Executed in Python, you have to list the SQL dependencies.
+    @python_field(lambda x: [x.first_name, x.last_name])
+    def full_name_python(self, first_name: str, last_name: str) -> str:
+        return f"{first_name} {last_name}"
+
+    # Can use kwargs and async functions...
+    @python_field(lambda x: {"fn": x.first_name, "pokemon_id": x.favorite_pokemon})
+    async def api_backed_python_field(self, fn: str, pokemon_id: int) -> str:
+        # In the real world, probably would cache this HTTP Call or something.
+        async with aiohttp.ClientSession() as session:
+            pokemon_url = f'https://pokeapi.co/api/v2/pokemon/{pokemon_id}/'
+            async with session.get(pokemon_url) as resp:
+                pokemon = await resp.json()
+                pokemon_name = pokemon["name"]
+                return f"{fn}'s Favorite Pokemon is pokemon {pokemon_name}"
+
+    # Can use relations and other virtual columns...
+    @python_field(lambda x: {"sql_full_name": x.full_name_sql(), "address": x.address()})
+    def full_name_with_relation_python(self, sql_full_name: str, address: Address) -> str:
+        return f"{sql_full_name} from {address.city} {address.state}"
+```

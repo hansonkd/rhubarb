@@ -72,7 +72,7 @@ class SqlType:
     optional: bool = False
     python_type: Optional[type] = None
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(self.raw_sql)
 
     @property
@@ -169,7 +169,7 @@ TYPE_SERIAL = SqlType(raw_sql="SERIAL")
 TYPE_BYTEA = SqlType(raw_sql="BYTEA")
 
 
-class SQLBuilder:
+class SqlBuilder:
     def __init__(self, dml_mode=False):
         self.q = ""
         self.vars = []
@@ -259,7 +259,7 @@ def call_with_maybe_info(f, obj, info):
 
 
 def write_single_or_tuple(
-    clauses: tuple[Selector, ...] | Selector, builder: SQLBuilder
+    clauses: tuple[Selector, ...] | Selector, builder: SqlBuilder
 ):
     if isinstance(clauses, tuple):
         wrote_last = False
@@ -286,7 +286,7 @@ class Join(Generic[T, J]):
     def __hash__(self):
         return self.id.__hash__()
 
-    def __sql__(self, builder: SQLBuilder, join_fields: set[str] = None):
+    def __sql__(self, builder: SqlBuilder, join_fields: set[str] = None):
         if self.object_set is None:
             self.model_reference.__sql__(builder)
         else:
@@ -320,7 +320,7 @@ class ModelReference(Generic[T]):
     def alias(self) -> str:
         return f"{self.id}"
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         schema_name = self.model.__schema__
         table_name = self.model.__table__
 
@@ -496,10 +496,10 @@ class Selector(Generic[V]):
     def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
         return iter(())
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         raise NotImplementedError(f"NotImplementedError: {self}")
 
-    def __extractor__(self, builder: SQLBuilder, alias_name: str = None) -> Extractor:
+    def __extractor__(self, builder: SqlBuilder, alias_name: str = None) -> Extractor:
         builder.start_selection()
         self.__sql__(builder)
         alias = builder.write_alias(alias_name)
@@ -590,10 +590,10 @@ class WrappedSelector(Selector[V]):
         else:
             yield from joins(self._selector, seen)
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         return self._selector.__sql__(builder)
 
-    def __extractor__(self, builder: SQLBuilder, alias_name: str = None) -> Extractor:
+    def __extractor__(self, builder: SqlBuilder, alias_name: str = None) -> Extractor:
         if (
             isinstance(self._selector, Aggregate)
             and self._selector._model_selector._join
@@ -636,7 +636,7 @@ class Computed(Selector[V]):
         self._infixed = infixed
         self._sep = sep
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         if self._infixed:
             if len(self._args) == 1:
                 builder.write(f"(")
@@ -674,7 +674,7 @@ class Case(Selector[V]):
         self.whens = whens
         self.default = default
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(f"CASE")
         for cond, then_val in self.whens:
             builder.write(" WHEN ")
@@ -699,7 +699,7 @@ class Value(Selector[V]):
         self.val = val
         self.sql_type = sql_type
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write_value(self.val)
 
     def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
@@ -711,7 +711,7 @@ class RawSQL(Selector[V]):
     def __init__(self, sql: str):
         self.sql = sql
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write(self.sql)
 
     def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
@@ -736,10 +736,10 @@ class PythonOnlyValue(Selector[V]):
     def __init__(self, val: Any):
         self.val = val
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         pass
 
-    def __extractor__(self, builder: SQLBuilder, alias_name: str = None) -> Extractor:
+    def __extractor__(self, builder: SqlBuilder, alias_name: str = None) -> Extractor:
         return PythonValueExtractor(self.val, None, None)
 
     def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, Join, str)]:
@@ -783,10 +783,10 @@ class UseSelector(Selector[V]):
         self.dependencies = dependencies
         self.kwarg_dependencies = kwarg_dependencies
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         raise RhubarbException("UseSelector cannot be used as SQL")
 
-    def __extractor__(self, builder: SQLBuilder, alias_name: str = None) -> Extractor:
+    def __extractor__(self, builder: SqlBuilder, alias_name: str = None) -> Extractor:
         dependant_extractors = [dep.__extractor__(builder) for dep in self.dependencies]
         dependant_kwarg_extractors = {
             k: dep.__extractor__(builder) for k, dep in self.kwarg_dependencies.items()
@@ -831,10 +831,10 @@ class ColumnSelector(Selector[V]):
     def __field__(self) -> Optional[StrawberryField]:
         return self._field
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write_column(self._model_reference.alias(), self._field.column_name)
 
-    def __extractor__(self, builder: SQLBuilder, alias: str = None) -> Extractor:
+    def __extractor__(self, builder: SqlBuilder, alias: str = None) -> Extractor:
         alias = builder.extract_column(self._model_reference, self._field, alias=alias)
         return SimpleExtractor(alias, self._model_reference, self._field)
 
@@ -871,7 +871,7 @@ class FieldSelector(Selector[V]):
     def __sql__(self, builder):
         self().__sql__(builder)
 
-    def __extractor__(self, builder: SQLBuilder, alias_name: str = None) -> Extractor:
+    def __extractor__(self, builder: SqlBuilder, alias_name: str = None) -> Extractor:
         builder.start_selection()
         self.__sql__(builder)
         alias = builder.write_alias(alias_name or self._field.name)
@@ -959,7 +959,7 @@ class ModelSelector(Selector[T]):
             selector = self._selector_for_field(column_field, unwrap=True)
             yield from joins(selector, seen=seen)
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         primary_key = pk_columns(self._model_reference.model)
         if isinstance(primary_key, tuple):
             builder.write("(")
@@ -976,7 +976,7 @@ class ModelSelector(Selector[T]):
             selector = self._selector_for_field(primary_key)
             selector.__sql__(builder)
 
-    def __extractor__(self, builder: SQLBuilder, alias: str = None) -> Extractor:
+    def __extractor__(self, builder: SqlBuilder, alias: str = None) -> Extractor:
         model = self._model_reference.model
         column_aliases = {}
         for column_field in columns(self._model_reference.model, inlinable=True):
@@ -1038,7 +1038,7 @@ class DataclassSelector(Selector[T]):
             selector = self._prefilled_selectors[name]
             yield from joins(selector, seen)
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         builder.write("(")
         wrote_val = False
         for name in self._selection_names:
@@ -1049,7 +1049,7 @@ class DataclassSelector(Selector[T]):
             selector.__sql__(builder)
         builder.write(")")
 
-    def __extractor__(self, builder: SQLBuilder, alias: str = None) -> Extractor:
+    def __extractor__(self, builder: SqlBuilder, alias: str = None) -> Extractor:
         field_aliases = {}
         for name in self._selection_names:
             selector = self._prefilled_selectors[name]
@@ -1079,10 +1079,10 @@ class ListSelector(Selector[V]):
     def __joins__(self, seen: set[tuple[str, str]]) -> Iterator[(str, str)]:
         yield from self.inner_selector.__joins__(seen)
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         self.inner_selector.__sql__(builder)
 
-    def __extractor__(self, builder: SQLBuilder, alias: str = None) -> Extractor:
+    def __extractor__(self, builder: SqlBuilder, alias: str = None) -> Extractor:
         return ListExtractor(
             self.inner_selector.__extractor__(builder, alias), None, None
         )
@@ -1102,7 +1102,7 @@ class AscDesc:
     def __init__(self, selector):
         self.selector = selector
 
-    def __sql__(self, builder: SQLBuilder):
+    def __sql__(self, builder: SqlBuilder):
         self.selector.__sql__(builder)
         builder.write(f" {self.direction}")
 
@@ -1461,10 +1461,10 @@ class ObjectSet(Generic[T, S]):
         # self.sync_cache(new_self)
         return new_self
 
-    def __sql__(self, builder: SQLBuilder, join_fields: set[str] = None):
+    def __sql__(self, builder: SqlBuilder, join_fields: set[str] = None):
         return self.build_select_statement(builder, join_fields)
 
-    def build_select_statement(self, builder: SQLBuilder, join_fields: set[str] = None):
+    def build_select_statement(self, builder: SqlBuilder, join_fields: set[str] = None):
         builder.write("SELECT ")
         builder.wrote_alias = False
         if pk_selections := self.pk_selector:
@@ -1572,7 +1572,7 @@ class ObjectSet(Generic[T, S]):
                 await self.load_data()
 
     async def load_data(self):
-        builder = SQLBuilder()
+        builder = SqlBuilder()
         pk_extractor, main_extractor = self.build_select_statement(builder)
         async with self.conn.cursor(row_factory=dict_row) as cur:
             await cur.execute(builder.q, builder.vars)
@@ -1635,11 +1635,11 @@ class MutationSet:
         ...
 
     async def execute(self, one=None):
-        builder = SQLBuilder()
+        builder = SqlBuilder()
         returning_extractor = self.build_statement(builder)
         return await self.do_execute(builder, returning_extractor, one)
 
-    def build_statement(self, builder: SQLBuilder) -> Extractor:
+    def build_statement(self, builder: SqlBuilder) -> Extractor:
         raise NotImplementedError
 
 
@@ -1664,7 +1664,7 @@ class InsertSet(MutationSet, Generic[T, V]):
         self.returning = returning
         self._one = one
 
-    def start_sql_statement(self, builder: SQLBuilder):
+    def start_sql_statement(self, builder: SqlBuilder):
         builder.write("INSERT INTO ")
         self.model_reference.__sql__(builder)
         builder.write(" AS ")
@@ -1692,7 +1692,7 @@ class InsertSet(MutationSet, Generic[T, V]):
                 builder.write_value(v, column_field.column_type)
             builder.write(")")
 
-    def build_statement(self, builder: SQLBuilder):
+    def build_statement(self, builder: SqlBuilder):
         self.start_sql_statement(builder)
 
         if self.returning is not None:
@@ -1733,10 +1733,10 @@ class UpdateDeleteSet(MutationSet):
             self.joins.setdefault(join_id, join)
             self.join_fields[join_id].add(join_field)
 
-    def start_sql_statement(self, builder: SQLBuilder):
+    def start_sql_statement(self, builder: SqlBuilder):
         raise NotImplementedError
 
-    def build_statement(self, builder: SQLBuilder):
+    def build_statement(self, builder: SqlBuilder):
         self.start_sql_statement(builder)
 
         wrote_join = False
@@ -1800,7 +1800,7 @@ class UpdateSet(UpdateDeleteSet, Generic[T, V]):
         if returning is not None:
             self.sync_joins(self.returning)
 
-    def start_sql_statement(self, builder: SQLBuilder):
+    def start_sql_statement(self, builder: SqlBuilder):
         builder.write("UPDATE ")
         self.model_reference.__sql__(builder)
         builder.write(" AS ")
@@ -1838,7 +1838,7 @@ class DeleteSet(UpdateDeleteSet, Generic[T, V]):
         if returning is not None:
             self.sync_joins(self.returning)
 
-    def start_sql_statement(self, builder: SQLBuilder):
+    def start_sql_statement(self, builder: SqlBuilder):
         builder.write("DELETE FROM ")
         self.model_reference.__sql__(builder)
         builder.write(" AS ")
@@ -1964,8 +1964,12 @@ class References:
     @property
     def real_table_name(self):
         if callable(self.table_name):
-            return self.table_name()
-        return self.table_name
+            tn = self.table_name()
+        else:
+            tn = self.table_name
+        if dataclasses.is_dataclass(tn):
+            tn = tn.__table__
+        return tn
 
 
 class ColumnField(StrawberryField):
@@ -2070,7 +2074,7 @@ virtual_column = functools.partial(column, virtual=True)
 
 @functools.wraps(column)
 def references(
-    table_name: Callable[[], str] | str, on_delete: ON_DELETE = None, **kwargs
+    table_name: Callable[[], str | dataclasses.dataclass] | str | dataclasses.dataclass, on_delete: ON_DELETE = None, **kwargs
 ):
     return column(references=References(table_name, on_delete=on_delete), **kwargs)
 

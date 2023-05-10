@@ -1,0 +1,56 @@
+# Auditing
+
+Rhubarb comes with built-in Auditing extension that can record all queries, subscriptions, and mutations.
+
+By default, the auditing extension will use a new connection to the database different from the current executing connection of the schema. This is to prevent Transaction rollbacks from deleting written audit events. It also allows you to specify an alternative auditing database (like TimeseriesDB) to silo your events.
+
+The default configuration only logs mutations. This is configurable with `AuditConfig`.
+
+
+```python
+from rhubarb import Schema
+from rhubarb.contrib.audit.extensions import AuditingExtension
+
+
+schema = Schema(
+    query=...,
+    mutation=...,
+    extensions=[
+        AuditingExtension,
+    ]
+)
+```
+
+## Builtin Events
+
+Extra events are recorded for login, logout, impersonate, stop_impersonating separately from the GQL mutation when auditing is in (if it is in one).
+
+## Custom Events
+
+You an save custom Audit events with `rhubarb.contrib.audit.models.log_event`
+
+```python
+await log_event(event_name="my_custom_event", variables={"wow": 1})
+
+
+# Passing request will fill in the current user, IP, etc from the request object.
+await log_event(request, event_name="my_custom_event", variables={"wow": 1})
+```
+
+## Config
+
+By default, audit will use the same DB configuration as your App. You can configure the audit database by specifying an enviornment variable.
+
+`PG_AUDIT_URI` - Connection String that describes a Postgres connection (e.g. `postgres://USER:PASSWORD@HOST:PORT/DATABASE`)
+
+```python
+@dataclasses.dataclass(frozen=True)
+class AuditConfig:
+    audit_mutations: bool = True
+    audit_queries: bool = False
+    audit_subscriptions: bool = False
+    reuse_conn: bool = False
+    postgres: PostgresConfig = dataclasses.field(
+        default_factory=lambda: load_postgres_config("PG_AUDIT_URI")
+    )
+```

@@ -1,0 +1,45 @@
+# Mutations
+
+Insert, Update, Delete are also optimized for GQL and can be used in Mutations.
+
+```python
+import uuid
+from rhubarb import Schema, ModelSelector, ModelUpdater, RhubarbExtension, type, \
+    get_conn, mutation, update, query, save
+from rhubarb.functions import concat
+from strawberry.types import Info
+
+
+@type
+class Mutation:
+    @mutation
+    def update_person(self, info: Info, person_id: uuid.UUID, new_name: str) -> Person:
+        def do(person: ModelUpdater[Person]):
+            # With Update expressions, we can use computations and reference sql fields and joins.
+            person.title = concat(
+                new_name, "(Old Name: ", person.title, ")"
+            )
+
+        def where(person: ModelSelector[Person]):
+            return person.id == person_id
+
+        # Even though this mutation is not async, we are returning an UpdateSet which will
+        # be executed by Rhubarb async middleware.
+        return update(get_conn(info), Person, do, where, info=info, one=True)
+
+    @mutation
+    async def update_name(
+        self, info: Info, person_id: uuid.UUID, new_name: str
+    ) -> Person:
+        conn = get_conn(info)
+        # Or avoid the optimization extension and just use await statements.
+        obj = await by_pk(conn, Person, person_id).one()
+        obj.title = new_name
+        return await save(conn, obj, info=info)
+
+
+schema = Schema(
+    query=Query,
+    mutation=Mutation
+)
+```

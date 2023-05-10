@@ -1,0 +1,48 @@
+# Tasks With Arq
+
+[Arq](https://github.com/samuelcolvin/arq) is a TaskQueue based on Redis and Supports Asyncio and is integrated into Rhubarb.
+
+Rhubarb is a light wrapper around `arq` so read the documentation there to understand more about tasks.
+
+
+## Creating a Task
+
+Create and register a task with the `@task` decorator.
+
+```python
+from rhubarb.contrib.arq.worker import task
+
+
+@task
+async def my_task(ctx, some_param: int = 0):
+    return 10 + some_param
+```
+
+Now you can enqueue a task like so:
+
+
+```python
+job = await my_task.enqueue_job(some_param=1)
+res = await job.result()
+```
+
+## Running a worker
+
+A worker is run using the `arq` command line program. Specify the Rhubarb settings to load all tasks with the `@task` decorator.
+
+```bash
+poetry run arq rhubarb.contrib.arq.worker.WorkerSettings
+```
+
+## Config
+
+Use `ARQ_TASK_MODULES` to define a comma seperated list of modules (or one module that imports the other modules) of where all your tasks live.
+
+Since the `@task` decorate is lazy and only registers tasks if their module is imported, an ARQ worker won't run without `ARQ_TASK_MODULES` configured.
+
+```python
+@dataclasses.dataclass(frozen=True)
+class ArqConfig:
+    task_modules: list[str] = dataclasses.field(default_factory=lambda: list_env("ARQ_TASK_MODULES", []))
+    redis: RedisConfig = dataclasses.field(default_factory=RedisConfig)
+```

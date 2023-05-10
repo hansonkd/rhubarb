@@ -1,0 +1,6 @@
+{
+  "default-where-cluase": "Automatic Filtering",
+  "sql-functions": "SQL Functions",
+  "multi": "Multiple Selections without GQL",
+  "field-permissions": "Column and Field Permissions"
+}

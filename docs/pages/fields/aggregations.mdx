@@ -1,0 +1,51 @@
+# Aggregations
+
+Aggregations are done by making a virtual table by setting registry to None and then specifying a `__group_by__`.
+
+Once a `__group_by__` is set on a table, all methods and virtual columns have to be aggregate functions or included in the group by.
+
+Rhubarb will make a subquery and join to do the groupby in order to avoid mixing groupby in your parent query.
+
+```python
+from rhubarb import  ModelSelector, BaseModel, column, table, relation, virtual_column
+from rhubarb.functions import sum_agg, avg_agg
+
+
+@table
+class Pet(BaseModel):
+    name: str = column()
+    owner_id: str = column()
+    weight_lbs: float = column()
+
+
+@table(skip_registry=True)
+class PetByOwner(Pet):
+    @virtual_column
+    def avg_weight(self: ModelSelector) -> float:
+        return avg_agg(self, self.weight_lbs)
+
+    @virtual_column
+    def weight_of_all_lets(self: ModelSelector) -> float:
+        return sum_agg(self, self.weight_lbs)
+
+    def __group_by__(self):
+        return self.owner_id
+
+
+@table
+class Person(BaseModel):
+    name: str = column()
+
+    # Specify relation list of objects. Optimization fence.
+    @relation(graphql_type=list[Pet])
+    def pets(self, pet: Pet):
+        return self.id == pet.owner_id
+
+    @relation
+    def pet_stats(self, stats: PetByOwner):
+        return self.id == stats.owner_id
+
+    @virtual_column
+    def avg_pet_weight(self) -> float:
+        return self.pet_stats().avg_weight
+```

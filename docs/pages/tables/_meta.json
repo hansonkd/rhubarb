@@ -1,0 +1,8 @@
+{
+  "table_basics": "Table Basics",
+  "base_models": "Base Models",
+  "migrations": "Migrations",
+  "types": "Python and SQL Types",
+  "custom_types": "Custom Types",
+  "public-private-schemas": "Private and Public Schemas"
+}

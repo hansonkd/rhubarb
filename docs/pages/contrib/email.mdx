@@ -1,0 +1,35 @@
+# Emails
+
+Rhubarb is configured to send standard Python Email's using `aiosmtplib`. See this
+
+
+```python
+from rhubarb.contrib.email.send import send
+from email.message import EmailMessage
+
+msg = EmailMessage()
+msg['Subject'] = "My Awesome Email"
+msg['From'] = "from_email@example.com"
+msg['To'] = ', '.join(["to@example.com", "other@example.com"])
+msg.set_content("Yo.")
+
+await send(msg)
+```
+
+## Config
+
+```python
+@dataclasses.dataclass(frozen=True)
+class EmailConfig:
+    hostname: Optional[str] = str_env("SMTP_HOSTNAME")
+    port: Optional[int] = int_env("SMTP_PORT")
+    sender: Optional[str] = str_env("SMTP_DEFAULT_SENDER")
+    username: Optional[str] = str_env("SMTP_USERNAME")
+    password: Optional[str] = str_env("SMTP_PASSWORD")
+    timeout: Optional[float] = float_env("SMTP_TIMEOUT", DEFAULT_TIMEOUT)
+    use_tls: bool = bool_env("SMTP_USE_TLS", False)
+    start_tls: Optional[bool] = bool_env("SMTP_START_TLS")
+    validate_certs: bool = bool_env("SMTP_VALIDATE_CERTS")
+    client_cert: Optional[str] = str_env("SMTP_CLIENT_CERT")
+    client_key: Optional[str] = str_env("SMTP_CLIENT_KEY")
+```

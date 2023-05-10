@@ -2,8 +2,11 @@ import importlib
 import os
 import dataclasses
 from pathlib import Path
+from typing import TypeVar
 
 from cachetools import TTLCache, Cache
+
+from rhubarb.contrib.arq.config import ArqConfig
 from rhubarb.contrib.starlette.config import CorsConfig
 
 from rhubarb.contrib.email.config import EmailConfig
@@ -53,13 +56,17 @@ class Config:
     audit: AuditConfig = dataclasses.field(default_factory=AuditConfig)
     sessions: SessionConfig = dataclasses.field(default_factory=SessionConfig)
     webauthn: WebAuthnConfig = dataclasses.field(default_factory=WebAuthnConfig)
+    arq: ArqConfig = dataclasses.field(default_factory=ArqConfig)
     localcache: Cache = dataclasses.field(
         default_factory=lambda: TTLCache(maxsize=1024, ttl=600)
     )
     email: EmailConfig = dataclasses.field(default_factory=lambda: EmailConfig())
 
 
-def config() -> Config:
+C = TypeVar("C", bound=Config)
+
+
+def config() -> C:
     if _program_state.config is None:
         raise RhubarbException(f"Must run `init_rhubarb()` before using `config()`")
     return _program_state.config

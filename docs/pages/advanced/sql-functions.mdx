@@ -1,0 +1,23 @@
+#
+
+In `rhubarb.functions` you can find many Postgres functions and aggregations already defined.
+
+
+| Python        | Postgres | Notes |
+| :------------ | :---------: | :---------: |
+| func         |    | use a custom Postgres Function |
+| sum_agg         |    SUM    | Needs `__group_by__` |
+| count_agg         |    COUNT    | Needs `__group_by__` |
+| avg_agg         |    AVG    | Needs `__group_by__` |
+| max_agg         |    MAX    | Needs `__group_by__` |
+| min_agg         |    MIN    | Needs `__group_by__` |
+| string_agg         |    STRING_AGG    | Needs `__group_by__` |
+| array_agg         |    ARRAY_AGG    | Needs `__group_by__` |
+| json_agg         |    JSONB_AGG    | Needs `__group_by__` |
+| concat         |    CONCAT    | |
+| coalesce         |    COALESCE    | |
+| is_null         |    `<val>`  IS NULL    | |
+| is_not_null         |    `<val>` IS NOT NULL    | |
+| case         |   CASE    | `case((<cond>, <val>), (<cond2>, <val>), default=<val>)` |
+| val         |       | Python value to pass to SQL (safe) |
+| raw         |       | Interpolate string into SQL query without escaping (unsafe) |

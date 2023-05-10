@@ -1,0 +1,100 @@
+# App Configuration
+
+Rhubarb is built to be configured with environment variables. They are extremely convenient and have a lot of benefits for when you are deploying the same code to many places that may have different DB configs, etc.
+
+## Basic Environment Vars
+
+The core Environment Vars that you will likely change are:
+
+| Env | Description |
+| :------------ | :---------: |
+| SECRET_KEY         |    Secret Key used for HTTP Cookies    |
+| ORIGINS         |    A comma seprated list of domains with protocol to accept for CSRF, CORS, WebAuthN, etc. (<span>https://</span>myapp.com,<span>https://</span>sub.myapp.com) |
+| PG_URI         |    Connection String that describes a Postgres connection (`postgres://USER:PASSWORD@HOST:PORT/DATABASE`) |
+| REDIS_URI         |    Connection String that describes a Redis connection (`redis://USER:PASSWORD@HOST:PORT/DATABASE`) |
+
+## Config
+
+Rhubarb's configuration is centered around frozen dataclasses that are loaded when your program starts. Once loaded, you can access the config and their related resources using the `config()` method.
+
+```python
+@dataclasses.dataclass(frozen=True)
+class Config:
+    migration_directory: Path = Path("./migrations")
+    registry: Registry = dataclasses.field(default_factory=lambda: DEFAULT_REGISTRY)
+    cors: CorsConfig = dataclasses.field(default_factory=CorsConfig)
+    postgres: PostgresConfig = dataclasses.field(default_factory=load_postgres_config)
+    redis: RedisConfig = dataclasses.field(default_factory=load_redis_config)
+    users: UserConfig = dataclasses.field(default_factory=UserConfig)
+    audit: AuditConfig = dataclasses.field(default_factory=AuditConfig)
+    sessions: SessionConfig = dataclasses.field(default_factory=SessionConfig)
+    webauthn: WebAuthnConfig = dataclasses.field(default_factory=WebAuthnConfig)
+    arq: ArqConfig = dataclasses.field(default_factory=ArqConfig)
+    localcache: Cache = dataclasses.field(
+        default_factory=lambda: TTLCache(maxsize=1024, ttl=600)
+    )
+    email: EmailConfig = dataclasses.field(default_factory=lambda: EmailConfig())
+```
+
+For each part of the app, a subconfig is used that is used to load the data from the environment vars. For instance here is the Postgres configuration.
+
+```python
+@dataclasses.dataclass(frozen=True)
+class PostgresConfig:
+    host: str = str_env("PG_HOST", "localhost")
+    port: int = int_env("PG_PORT", 5432)
+    user: str = str_env("PG_USER", "postgres")
+    password: str = str_env("PG_PASSWORD", "postgres")
+    dbname: str = str_env("PG_DBNAME", "postgres")
+    min_size: int = int_env("PG_POOL_MIN_SIZE", 4)
+    max_size: int | None = int_env("PG_POOL_MAX_SIZE")
+```
+
+The configs in general are setup to load their values from the environment.
+
+When db configurations (Redis, Postgres) are used in multiple configs, the config itself is hashed and a single Pool instance per config hash is then shared between separate configs with the same values.
+
+
+## Custom Configs
+
+You can add your own fields to the Rhubarb config by subclassing. Your module containing a config should contain the minimum imports needed to avoid circular imports.
+
+```python
+@dataclasses.dataclass(frozen=True)
+class CustomConfig(Config):
+     awesome_setting: str = str_env("AWESOME_ENV_VAR", "woah")
+
+
+# you can instantiate your config with a callable if you want more flexibility
+def config_fn():
+    return CustomConfig(
+        registry=my_custom_registry,
+        audit=AuditConfig(
+          audit_queries=True,
+          audit_subscriptions=True
+        )
+    )
+```
+
+Tell Rhubarb where to find your custom config. It can either be the class or the object. If it is a callable or class, it will be initialized into an object on import.
+
+```bash
+RHUBARB_CONFIG="import_path.to_my.custom_config.CustomConfig" python -m rhubarb.contrib.starlette.server
+```
+
+Access it through `config()` (trying to manually access your config directly through an import will probably cause circular imports)
+
+```python
+from rhubarb.config import config
+
+def my_function() -> str:
+     conf: CustomConfig = config()
+     return conf.awesome_setting
+```
+
+You can only use `config()` lazily in a function, never as a top level import.
+
+## `init_rhubarb()`
+
+If you are manually running scripts outside of rhubarbs entrypoints for HTTP servers, tasks, etc, you will need to call `init_rhubarb` exactly once for each process. This is done for you automatically if you use commands supplied by Rhubarb.
+

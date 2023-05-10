@@ -189,7 +189,7 @@ class Author(BaseUpdatedAtModel):
 class Book(BaseUpdatedAtModel):
     title: str = column()
     comments: Optional[str] = column(sql_default=None)
-    author_id: uuid.UUID = references(Author.__table__, on_delete="RESTRICT")
+    author_id: uuid.UUID = references(Author, on_delete="RESTRICT")
     published_on: datetime.date = column()
     meta_info: Optional[JSON] = column(sql_default=None)
     favorite_pages: list[int] = column(sql_default="'{}'")

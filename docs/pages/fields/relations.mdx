@@ -1,0 +1,63 @@
+# Relations
+
+Rhubarb will follow child selections and inline as many queries for relation data as possible. This means that most relations that return 1 or 0 objects can be inlined in the same Query as their parent object.
+
+## Specify a SQL Reference Constraint
+
+When defining your model, specify a reference to another model's table.
+
+```python
+owner_id: uuid.UUID = references(MyModel)
+```
+
+You can also do it lazily if the Model is defined after it.
+
+```python
+owner_id: uuid.UUID = references(lambda: MyModel)
+```
+
+## Relation with One or None objects
+
+By default a relation field computes one or None related objects. you create a relation field by decorating a method that returns a boolean selector.
+
+```python
+@table
+class Pet:
+    owner_id: uuid.UUID = references(Person)
+
+    @relation
+    def owner(self: ModelSelector[Pet], owner: Person):
+        return self.owner_id == owner.id
+```
+
+## Relationships with Many Objects
+
+If you have a parent with many children, you can return a list of children by specifying that you want to return a list using `graphql_type` like so `@relation(graphql_type=list[Pet])`.
+
+Because Rhubarb Aggressively inlines all possible fields into a SQL Query, if you return a `list` from a Relation, there is an optimization fence in which Rhubarb will no longer try to inline the relation. Rhubarb will instead start a new tree and start inlining as many children as possible. This is to avoid exploding cartesian products.
+
+```python
+import uuid
+from rhubarb import  BaseModel, column, table, relation, references
+
+
+@table
+class Pet(BaseModel):
+    name: str = column()
+    owner_id: uuid.UUID = references(lambda: Person)
+
+    # Default relation returns a single object
+    @relation
+    def owner(self, owner: "Person"):
+        return self.owner_id == owner.id
+
+
+@table
+class Person(BaseModel):
+    name: str = column()
+
+    # Specify relation list of objects. Optimization fence.
+    @relation(graphql_type=list[Pet])
+    def pets(self, pet: Pet):
+        return self.id == pet.owner_id
+```

@@ -22,5 +22,7 @@ from .object_set import (
     Registry,
     DEFAULT_REGISTRY,
     UNSET,
+    SqlBuilder,
+    SqlType
 )
 from strawberry import Schema, type, mutation
