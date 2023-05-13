@@ -8,7 +8,7 @@ jobs:
       matrix:
         python-version: ["3.11"]
         poetry-version: ["1.4"]
-        os: [ubuntu-18.04, macos-latest]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: ikalnytskyi/action-setup-postgres@v4
