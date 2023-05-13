@@ -16,10 +16,12 @@ from rhubarb.migrations.utils import (
 from rhubarb.migrations.models import migration_was_applied, mark_migration_as_applied
 
 
-async def run_migrations(create_extensions=True, check=False) -> bool:
+async def run_migrations(create_extensions=True, check=False, only_extensions=False) -> bool:
     async with connection() as conn:
         if create_extensions and not check:
             await conn.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+        if only_extensions:
+            return
 
         migration_dir = config().migration_directory
         meta_migration_dir = migration_dir / "meta"
@@ -71,10 +73,15 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip creating the necessary extensions for UUID, etc.",
     )
+    parser.add_argument(
+        "--only-extensions",
+        action="store_true",
+        help="Only run creating extensions.",
+    )
     args = parser.parse_args()
 
     program_result = asyncio.run(
-        run_migrations(check=args.check, create_extensions=not args.skip_extensions)
+        run_migrations(check=args.check, create_extensions=not args.skip_extensions, only_extensions=args.only_extensions)
     )
     if program_result:
         sys.exit(os.CLD_EXITED)
