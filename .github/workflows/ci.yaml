@@ -23,4 +23,6 @@ jobs:
       - name: Pytest Install
         run: poetry install --with test
       - name: Pytest Run
+        run: poetry run python3 -m rhubarb.migrations.cmd.apply
+      - name: Pytest Run
         run: poetry run pytest
