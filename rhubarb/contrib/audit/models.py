@@ -21,6 +21,7 @@ from rhubarb.contrib.postgres.connection import connection
 from rhubarb.contrib.redis.cache import local_only_cache
 from rhubarb.core import SqlModel
 from rhubarb.crud import by_pk
+from rhubarb.object_set import BUILTINS
 
 
 @asynccontextmanager
@@ -47,7 +48,7 @@ class GqlQuery(SqlModel):
 
 @table(registry=audit_registry)
 class AuditEvent(BaseModel):
-    timestamp: datetime.datetime = column(sql_default="now()")
+    timestamp: datetime.datetime = column(sql_default=BUILTINS.NOW)
     gql_query_sha_hash: Optional[bytes] = column(sql_default=None)
     variables: Optional[dict] = column(sql_default=None)
     meta: Optional[dict] = column(sql_default=None)

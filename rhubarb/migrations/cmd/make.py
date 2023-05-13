@@ -5,6 +5,7 @@ import sys
 
 from rhubarb.config import config, init_rhubarb
 from rhubarb.migrations.data import MigrationStateDatabase
+from rhubarb.migrations.models import migration_registry
 from rhubarb.migrations.utils import (
     generate_migration_file,
     current_migration_state,
@@ -22,8 +23,18 @@ except ImportError:
 
 
 def make_migration(check=False, empty=False) -> bool:
-    migration_dir = config().migration_directory
-    registry = config().registry
+    conf = config()
+    migration_dir = conf.migration_directory
+    registry = conf.registry
+    meta_migration_dir = migration_dir / "meta"
+    r = do_make_migration(meta_migration_dir, migration_registry, check, empty)
+    r = do_make_migration(migration_dir, registry, check, empty) or r
+    if not r:
+        logging.info(f"No migration to create.")
+    return r
+
+
+def do_make_migration(migration_dir, registry, check, empty):
     head_migrations, current_migrations = load_migrations(migration_dir)
     old_state = current_migration_state(head_migrations, current_migrations)
     new_state = MigrationStateDatabase.from_registry(registry)
@@ -35,7 +46,6 @@ def make_migration(check=False, empty=False) -> bool:
         empty=empty,
     )
     if result is None:
-        logging.info(f"No migration to create.")
         return False
 
     fn, mig_file = result
@@ -49,10 +59,11 @@ def make_migration(check=False, empty=False) -> bool:
             migration_dir.mkdir(parents=True, exist_ok=True)
         with open(migration_dir / fn, "w") as f:
             f.write(mig_file)
+    return True
 
 
 if __name__ == "__main__":
-    init_rhubarb()
+    init_rhubarb(check=False)
     parser = argparse.ArgumentParser(
         prog="rhubarb.migrations.cmd.make",
         description="Make new migrations based on the state of your program's tables",

@@ -42,7 +42,7 @@ class RhubarbExtension(SchemaExtension):
         if prefetched := object_sets.get(cur_key, None):
             return await prefetched.for_pk(pk_concrete(root))
 
-        field: StrawberryField = root and root._type_definition.get_field(
+        field: StrawberryField = root and hasattr(root, "_type_definition") and root._type_definition.get_field(
             info.field_name
         )
         real_info = Info(_raw_info=info, _field=field)
@@ -119,7 +119,7 @@ class TransactionalMutationExtension(SchemaExtension):
             yield
 
 
-class TestingExtension(SchemaExtension):
+class RhubarbTestingExtension(SchemaExtension):
     def __init__(self, *, execution_context, conn=None):
         self.conn = conn
         super().__init__(execution_context=execution_context)

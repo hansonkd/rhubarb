@@ -5,14 +5,16 @@ from psycopg import Rollback, AsyncConnection
 
 from rhubarb.crud import insert_objs
 from rhubarb.model import BaseModel
-from rhubarb.object_set import column, table, ObjectSet
+from rhubarb.object_set import column, table, ObjectSet, Registry, BUILTINS
+
+migration_registry = Registry()
 
 
-@table
+@table(registry=migration_registry)
 class AppliedMigration(BaseModel):
     __table__ = "rhubarb_migrations"
     migration_id: str = column()
-    applied_on: datetime.datetime = column(insert_default="now()")
+    applied_on: datetime.datetime = column(insert_default=BUILTINS.NOW)
 
 
 async def migration_was_applied(conn: AsyncConnection, migration_id: str) -> bool:

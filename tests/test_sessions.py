@@ -31,7 +31,7 @@ from rhubarb.contrib.users.middleware import (
     SessionAuthenticationMiddleware,
 )
 from rhubarb.contrib.users.models import user_registry, User, get_user
-from rhubarb.extension import TestingExtension
+from rhubarb.extension import RhubarbTestingExtension
 from rhubarb.migrations.utils import reset_db_and_fast_forward
 from rhubarb.schema import ErrorRaisingSchema
 
@@ -122,7 +122,7 @@ async def async_http_client(postgres_connection) -> AsyncClient:
         query=Query,
         mutation=Mutation,
         extensions=[
-            functools.partial(TestingExtension, conn=postgres_connection),
+            functools.partial(RhubarbTestingExtension, conn=postgres_connection),
             AuditingExtension,
         ],
         config=StrawberryConfig(auto_camel_case=False),

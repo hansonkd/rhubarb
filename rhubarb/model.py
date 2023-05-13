@@ -3,20 +3,20 @@ import datetime
 import uuid
 
 from rhubarb.core import SqlModel, Serial
-from rhubarb.object_set import column
+from rhubarb.object_set import column, BUILTINS
 
 
 @dataclasses.dataclass
 class BaseModel(SqlModel):
     __schema__ = "public"
     __pk__ = "id"
-    id: uuid.UUID = column(sql_default="uuid_generate_v4()")
+    id: uuid.UUID = column(sql_default=BUILTINS.UUID_GENERATE_V4)
 
 
 @dataclasses.dataclass
 class BaseUpdatedAtModel(BaseModel):
-    created: datetime.datetime = column(insert_default="now()")
-    updated: datetime.datetime = column(update_default="now()")
+    created: datetime.datetime = column(insert_default=BUILTINS.NOW)
+    updated: datetime.datetime = column(update_default=BUILTINS.NOW)
 
 
 @dataclasses.dataclass
@@ -26,5 +26,5 @@ class BaseIntModel(BaseModel):
 
 @dataclasses.dataclass
 class BaseIntUpdatedAtModel(BaseIntModel):
-    created: datetime.datetime = column(insert_default="now()")
-    updated: datetime.datetime = column(update_default="now()")
+    created: datetime.datetime = column(insert_default=BUILTINS.NOW)
+    updated: datetime.datetime = column(update_default=BUILTINS.NOW)

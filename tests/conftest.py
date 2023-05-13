@@ -14,7 +14,7 @@ import strawberry
 from strawberry.schema.config import StrawberryConfig
 from strawberry.types import Info
 
-from rhubarb.core import get_conn, Binary, PhoneNumber, Email, RhubarbPhoneNumber
+from rhubarb.core import get_conn, Binary, PhoneNumber, Email, RhubarbPhoneNumber, SmallInt
 from rhubarb.crud import delete, save, insert_objs, update, query, by_pk
 from rhubarb.extension import RhubarbExtension, TransactionalMutationExtension
 from rhubarb.fixtures import *  # noqa
@@ -40,7 +40,7 @@ from rhubarb.object_set import (
     Constraint,
     Index,
     References,
-    references,
+    references, BUILTINS,
 )
 from rhubarb.schema import ErrorRaisingSchema
 
@@ -192,11 +192,12 @@ class Book(BaseUpdatedAtModel):
     author_id: uuid.UUID = references(Author, on_delete="RESTRICT")
     published_on: datetime.date = column()
     meta_info: Optional[JSON] = column(sql_default=None)
-    favorite_pages: list[int] = column(sql_default="'{}'")
+    favorite_pages: list[int] = column(sql_default=BUILTINS.EMPTY_ARRAY)
     internal_bin_info: Optional[bytes] = column(sql_default=None)
     contact_phone: Optional[PhoneNumber] = column(sql_default=None)
     contact_email: Optional[Email] = column(sql_default=None)
     public: bool = column(sql_default=False)
+    small: SmallInt = column(sql_default=1)
 
     @relation
     def author(self, author: Author):
@@ -244,7 +245,7 @@ class RatingModel(BaseIntModel):
     reviewer_id: uuid.UUID = column(
         references=References(Reviewer.__table__, on_delete="SET NULL")
     )
-    published_on: datetime.datetime = column(insert_default="now()")
+    published_on: datetime.datetime = column(insert_default=BUILTINS.NOW)
 
     @relation
     def book(self, om: Book):

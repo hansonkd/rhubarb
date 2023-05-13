@@ -6,7 +6,6 @@ from psycopg import AsyncConnection, Rollback
 from strawberry.types import Info
 
 from rhubarb.core import (
-    default_function_to_python,
     T,
     V,
     call_with_maybe_info,
@@ -26,6 +25,7 @@ from rhubarb.object_set import (
     DeleteSet,
     ModelUpdater,
     pk_selection,
+    default_function_to_python
 )
 
 

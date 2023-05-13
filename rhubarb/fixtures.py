@@ -17,7 +17,6 @@ async def rhubarb(config_override):
     with config_override(
         Config(
             postgres=PostgresConfig(
-                host="127.0.0.1", dbname="debug", password="debug", user="debug"
             )
         )
     ):

@@ -2,7 +2,7 @@ import copy
 import inspect
 import pprint
 from typing import Callable, Type, Any, Awaitable, Optional, Self
-from rhubarb.core import SqlModel, T, UNSET, DEFAULT_SQL_FUNCTION, Unset
+from rhubarb.core import SqlModel, T, UNSET, Unset
 from rhubarb.errors import RhubarbException
 from rhubarb.object_set import (
     SqlBuilder,
@@ -17,6 +17,7 @@ from rhubarb.object_set import (
     ObjectSet,
     References,
     ON_DELETE,
+    DEFAULT_SQL_FUNCTION
 )
 from rhubarb.object_set import table as table_decorator
 import dataclasses
@@ -189,7 +190,7 @@ class CreateColumn(AlterOperation):
     python_name: str
     type: SqlType
     default: DEFAULT_SQL_FUNCTION | None = None
-    references: FrozenReference = None
+    references: FrozenReference | None = None
 
     def __sql__(self, builder: SqlBuilder):
         builder.write(f"ADD COLUMN {self.name} {self.type.sql}")
@@ -200,11 +201,8 @@ class CreateColumn(AlterOperation):
 
         if not isinstance(self.default, Unset):
             default = self.default
-            if isinstance(default, str):
-                builder.write(f" DEFAULT {default}")
-            else:
-                builder.write(f" DEFAULT ")
-                builder.write_value(default, self.type)
+            builder.write(f" DEFAULT ")
+            builder.write_value(default, self.type)
 
         if self.references:
             builder.write(f" REFERENCES {self.references.table_name}")
@@ -269,11 +267,8 @@ class SetDefault:
     def __sql__(self, builder: SqlBuilder):
         builder.write(f"ALTER {self.name} SET ")
         default = self.default
-        if isinstance(default, str):
-            builder.write(f" DEFAULT {default}")
-        else:
-            builder.write(f" DEFAULT ")
-            builder.write_value(default, self.type)
+        builder.write(f" DEFAULT ")
+        builder.write_value(default, self.type)
 
     def alter(self, table):
         columns = copy.copy(table.columns)
@@ -519,15 +514,10 @@ class CreateTable(MigrationOperation):
                 builder.write(" NULL")
             else:
                 builder.write(" NOT NULL")
-            if not isinstance(column.default, Unset) and not isinstance(
-                column.default, Unset
-            ):
+            if not isinstance(column.default, Unset):
                 default = column.default
-                if isinstance(default, str):
-                    builder.write(f" DEFAULT {default}")
-                else:
-                    builder.write(f" DEFAULT ")
-                    builder.write_value(default, column.type)
+                builder.write(f" DEFAULT ")
+                builder.write_value(default, column.type)
 
             if column.references:
                 constraint_name = column.references.compute_constraint_name(column.name)
@@ -565,19 +555,29 @@ class CreateTable(MigrationOperation):
             await conn.execute(builder.q)
 
     def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
+        columns = {}
+        for column in self.columns:
+            columns[column.name] = MigrationStateColumn(
+                name=column.name,
+                type=column.type,
+                default=column.default,
+                python_name=column.python_name,
+                references=column.references,
+            )
+
         new_table = MigrationStateTable(
             schema=self.schema,
             name=self.name,
             class_name=self.class_name,
             primary_key=self.primary_key,
-            columns={},
+            columns=columns,
             constraints=self.constraints,
             indexes=self.indexes,
         )
 
         tables = copy.copy(state.tables)
         tables[(self.schema, self.name)] = new_table
-        return dataclasses.replace(state, tables=state.tables)
+        return dataclasses.replace(state, tables=tables)
 
 
 @register_operation
@@ -754,7 +754,6 @@ class RawSQL(MigrationOperation):
 
 @dataclasses.dataclass(frozen=True)
 class Migration:
-    id: str
     depends_on: list[str]
     operations: list[MigrationOperation]
     atomic: bool = True

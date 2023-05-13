@@ -1,4 +1,5 @@
 import importlib
+import logging
 import os
 import dataclasses
 from pathlib import Path
@@ -17,6 +18,7 @@ from rhubarb.contrib.sessions.config import SessionConfig
 from rhubarb.contrib.audit.config import AuditConfig
 from rhubarb.contrib.webauthn.config import WebAuthnConfig
 from rhubarb.errors import RhubarbException
+from rhubarb.migrations.utils import run_migration_checks
 from rhubarb.object_set import Registry, DEFAULT_REGISTRY
 
 
@@ -28,8 +30,9 @@ class ProgramState:
 _program_state = ProgramState()
 
 
-def init_rhubarb():
+def init_rhubarb(check=True):
     if _program_state.config is None:
+        logging.basicConfig(level=logging.DEBUG)
         config_path = os.getenv("RHUBARB_CONFIG", None)
         if config_path is None:
             config_obj = Config()
@@ -41,6 +44,9 @@ def init_rhubarb():
             if callable(config_obj):
                 config_obj = config_obj()
         _program_state.config = config_obj
+        if check:
+            run_migration_checks(config_obj)
+
     else:
         raise RhubarbException("Cannot call `init_rhubarb` more than once.")
 

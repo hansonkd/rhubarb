@@ -91,13 +91,13 @@ You can add a `DEFAULT` to a column with `sql_default`. Only some SQL functions 
 ```python
 import uuid
 import datetime
-from rhubarb import BaseModel, column, table
+from rhubarb import BaseModel, column, table, BUILTINS
 
 
 @table
 class AwesomeTable(BaseModel):
-    some_uuid: uuid.UUID = column(sql_default="generate_uuid_v4()")
-    some_datetime: datetime.datetime = column(sql_default="now()")
+    some_uuid: uuid.UUID = column(sql_default=BUILTINS.UUID_GENERATE_V4)
+    some_datetime: datetime.datetime = column(sql_default=BUILTINS.NOW)
 ```
 
 

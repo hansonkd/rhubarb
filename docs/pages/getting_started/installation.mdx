@@ -53,7 +53,6 @@ services:
       POSTGRES_USER: postgres
     ports:
       - 5435:5432
-    restart: on-failure:3
   redis:
     image: redis:latest
     ports:
@@ -70,5 +69,7 @@ poetry run python -m rhubarb.migrations.cmd.apply
 Run your app:
 
 ```bash
-uvicorn rhubarb-demo.app:app
+poetry run uvicorn rhubarb_demo.app:app
 ```
+
+Navigate to `http://localhost:8000/graphql/` to use the GraphiQL tool to interact with your API.

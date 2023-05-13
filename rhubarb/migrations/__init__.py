@@ -1,3 +1,4 @@
+from rhubarb.object_set import SqlType, Unset, UNSET
 from .data import (
     AddIndex,
     RenameIndex,
@@ -17,4 +18,6 @@ from .data import (
     RunPython,
     RawSQL,
     MigrationInfo,
+    MigrationConstraint,
+    MigrationIndex
 )

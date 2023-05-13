@@ -10,7 +10,7 @@ from rhubarb.contrib.audit.config import AuditConfig
 from rhubarb.contrib.audit.models import AuditEvent, GqlQuery, audit_registry
 from rhubarb.contrib.audit.extensions import AuditingExtension
 from rhubarb.contrib.postgres.connection import override_conn
-from rhubarb.extension import TransactionalMutationExtension, TestingExtension
+from rhubarb.extension import TransactionalMutationExtension, RhubarbTestingExtension
 from rhubarb.migrations.utils import reset_db_and_fast_forward
 from rhubarb.schema import ErrorRaisingSchema
 from tests.conftest import Query, Mutation, testing_registry, DeleteException
@@ -35,7 +35,7 @@ async def audit_schema(postgres_connection, audit_config):
             query=Query,
             mutation=Mutation,
             extensions=[
-                functools.partial(TestingExtension, conn=postgres_connection),
+                functools.partial(RhubarbTestingExtension, conn=postgres_connection),
                 AuditingExtension,
             ],
             config=StrawberryConfig(auto_camel_case=False),
@@ -51,7 +51,7 @@ async def audit_schema_transactional_rollback_event(postgres_connection, audit_c
                 query=Query,
                 mutation=Mutation,
                 extensions=[
-                    functools.partial(TestingExtension, conn=postgres_connection),
+                    functools.partial(RhubarbTestingExtension, conn=postgres_connection),
                     AuditingExtension,
                     TransactionalMutationExtension,
                 ],
@@ -70,7 +70,7 @@ async def audit_schema_transactional_dont_rollback_event(
                 query=Query,
                 mutation=Mutation,
                 extensions=[
-                    functools.partial(TestingExtension, conn=postgres_connection),
+                    functools.partial(RhubarbTestingExtension, conn=postgres_connection),
                     TransactionalMutationExtension,
                     AuditingExtension,
                 ],

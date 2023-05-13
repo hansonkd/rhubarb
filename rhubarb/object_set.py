@@ -4,6 +4,7 @@ import asyncio
 import copy
 import dataclasses
 import datetime
+import enum
 import functools
 import inspect
 import json
@@ -24,14 +25,12 @@ from typing import (
     Callable,
     Mapping,
     Union,
-    TYPE_CHECKING,
     Awaitable,
-    NewType,
 )
 
 import phonenumbers
 import strawberry
-from psycopg import Connection, AsyncConnection
+from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from strawberry.annotation import StrawberryAnnotation
@@ -40,6 +39,7 @@ from strawberry.type import StrawberryOptional, StrawberryType, StrawberryList
 from strawberry.types import Info
 from strawberry.types.fields.resolver import StrawberryResolver
 from strawberry.types.nodes import SelectedField, FragmentSpread, InlineFragment
+from graphql.pyutils import camel_to_snake
 
 from rhubarb.core import (
     T,
@@ -47,15 +47,11 @@ from rhubarb.core import (
     SqlModel,
     J,
     UNSET,
-    DEFAULT_SQL_FUNCTION,
     new_ref_id,
     SQLValue,
-    default_function_to_python,
     Unset,
     Binary,
-    Serial,
-    Email,
-    PhoneNumber,
+    Serial, SmallIntType, SmallInt,
 )
 from rhubarb.errors import RhubarbException
 from strawberry.field import StrawberryField
@@ -85,6 +81,8 @@ class SqlType:
         match self.raw_sql.upper():
             case "BIGINT":
                 return int
+            case "SMALLINT":
+                return SmallInt
             case "FLOAT":
                 return float
             case "TEXT":
@@ -131,6 +129,8 @@ class SqlType:
         if inspect.isclass(t):
             if issubclass(t, bool):
                 return TYPE_BOOLEAN
+            elif t is SmallIntType:
+                return TYPE_SMALLINT
             elif issubclass(t, int):
                 return TYPE_BIGINT
             elif issubclass(t, float):
@@ -164,6 +164,7 @@ TYPE_TIMESTAMP = SqlType(raw_sql="TIMESTAMPTZ")
 TYPE_TEXT = SqlType(raw_sql="TEXT")
 TYPE_FLOAT = SqlType(raw_sql="FLOAT")
 TYPE_BIGINT = SqlType(raw_sql="BIGINT")
+TYPE_SMALLINT = SqlType(raw_sql="SMALLINT")
 TYPE_BOOLEAN = SqlType(raw_sql="BOOLEAN")
 TYPE_SERIAL = SqlType(raw_sql="SERIAL")
 TYPE_BYTEA = SqlType(raw_sql="BYTEA")
@@ -227,6 +228,13 @@ class SqlBuilder:
                 self.write("NULL")
             elif isinstance(v, list):
                 self.write(f"'{v}'::{sql_type.sql}")
+            elif isinstance(v, int):
+                self.write(str(v))
+            elif isinstance(v, bool):
+                if v:
+                    self.write("TRUE")
+                else:
+                    self.write("FALSE")
             else:
                 sql_type = sql_type or SqlType.from_python(type(v))
                 if self.dml_mode:
@@ -921,7 +929,9 @@ class ModelSelector(Selector[T]):
             }
         else:
             self._selected_lookup = {f.name: f for f in selected_fields}
+            self._selected_lookup |= {camel_to_snake(f.name): f for f in selected_fields}
             self._selection_names = {f.name for f in selected_fields}
+            self._selection_names |= {camel_to_snake(f.name) for f in selected_fields}
         self._selection_names |= pk_column_names(self._model_reference.model, self)
 
     def __repr__(self):
@@ -2395,3 +2405,35 @@ def resolve_group_by(model: SqlModel, selector: ModelSelector):
     else:
         model_pk = gb_result
     return model_pk
+
+
+class BUILTINS(enum.Enum):
+    UUID_GENERATE_V4 = "uuid_generate_v4()"
+    NOW = "now()"
+    EMPTY_ARRAY = "'{}'"
+
+    def __sql__(self, builder: SqlBuilder):
+        builder.write(self.value)
+
+
+DEFAULT_SQL_FUNCTION = Union[BUILTINS, Value, bool, int, float, str, None]
+
+
+def default_function_to_python(f: DEFAULT_SQL_FUNCTION) -> Callable[[], Any]:
+    match f:
+        case BUILTINS.UUID_GENERATE_V4:
+            return uuid.uuid4
+        case BUILTINS.NOW:
+            return datetime.datetime.utcnow
+        case BUILTINS.EMPTY_ARRAY:
+            return lambda: []
+        case None:
+            return lambda: None
+        case other:
+            if isinstance(other, Value):
+                return lambda: other.val
+            elif isinstance(other, (bool, int, float, str)):
+                return lambda: other
+            raise RhubarbException(
+                f"Invalid default function to use for column {other}. Available: {DEFAULT_SQL_FUNCTION}"
+            )
