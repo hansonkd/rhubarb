@@ -8,7 +8,7 @@ By default you must define your own user model that extends the `User` superclas
 
 ```python
 from rhubarb import DEFAULT_REGISTRY, table, column
-from rhubarb.contrib.users.models import User, user_registry
+from rhubarb.pkg.users.models import User, user_registry
 
 DEFAULT_REGISTRY.link(user_registry)
 
@@ -85,15 +85,14 @@ import uuid
 import rhubarb
 from rhubarb import Schema, Registry, table, get_conn
 from rhubarb.config import Config
-from rhubarb.contrib.users.models import User, user_registry, get_user
-from rhubarb.contrib.users.backends import login
-from rhubarb.contrib.users.config import UserConfig
-from rhubarb.contrib.users.middleware import SessionAuthenticationMiddleware
-from rhubarb.contrib.sessions.middleware import SessionMiddleware
-from rhubarb.contrib.starlette.asgi import GraphQL
+from rhubarb.pkg.users.models import User, user_registry, get_user
+from rhubarb.pkg.users.backends import login
+from rhubarb.pkg.users.config import UserConfig
+from rhubarb.pkg.users.middleware import SessionAuthenticationMiddleware
+from rhubarb.pkg.sessions.middleware import SessionMiddleware
+from rhubarb.pkg.starlette.applications import Starlette, GraphQL
 
 from strawberry.types import Info
-from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.middleware import Middleware
 

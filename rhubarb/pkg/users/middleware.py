@@ -8,8 +8,8 @@ from starlette.middleware.authentication import (
 from starlette.requests import HTTPConnection
 from starlette.types import ASGIApp
 
-from rhubarb.contrib.postgres.connection import connection
-from rhubarb.contrib.users.models import get_user
+from rhubarb.pkg.postgres.connection import connection
+from rhubarb.pkg.users.models import get_user
 
 
 class SessionAuthenticationBackend(AuthenticationBackend):

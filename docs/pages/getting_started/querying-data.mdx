@@ -7,7 +7,7 @@ You can either use a Strawberry Schema or use the Model directly.
 We can use our schema to make queries and Rhubarb will optimize them for you.
 
 ```python
-from rhubarb.contrib.postgres.connection import connection
+from rhubarb.pkg.postgres.connection import connection
 
 async with connection() as conn:
     res = await schema.execute(
@@ -34,7 +34,7 @@ You can also make queries  like a normal ORM for use in general Python apps and 
 
 ```python
 from rhubarb import query, Desc
-from rhubarb.contrib.postgres.connection import connection
+from rhubarb.pkg.postgres.connection import connection
 
 async with connection() as conn:
     bool_list: list[bool] = await query(conn, Person).select(lambda x: x.int_is_big()).as_list()

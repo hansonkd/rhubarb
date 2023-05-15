@@ -2,7 +2,7 @@ import time
 
 from strawberry.extensions import SchemaExtension
 
-from rhubarb.contrib.audit.models import log_gql_event, audit_connection
+from rhubarb.pkg.audit.models import log_gql_event, audit_connection
 
 
 class AuditingExtension(SchemaExtension):

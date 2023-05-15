@@ -3,8 +3,8 @@ import pytest_asyncio
 from psycopg.errors import UniqueViolation
 
 from rhubarb import Registry, table, save
-from rhubarb.contrib.users.config import UserConfig
-from rhubarb.contrib.users.models import (
+from rhubarb.pkg.users.config import UserConfig
+from rhubarb.pkg.users.models import (
     User,
     set_password,
     set_email,

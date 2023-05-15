@@ -2,7 +2,7 @@ from collections import defaultdict
 
 import pytest
 
-from rhubarb.contrib.postgres.connection_base import track_queries
+from rhubarb.pkg.postgres.connection_base import track_queries
 from tests.conftest import DeleteException
 
 

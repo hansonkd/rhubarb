@@ -6,9 +6,9 @@ from psycopg import AsyncConnection
 from pydantic import validator
 from rhubarb import save, RhubarbException
 from rhubarb.config import config
-from rhubarb.contrib.redis.rate_limit import rate_limit
-from rhubarb.contrib.users.models import U
-from rhubarb.contrib.webauthn.models import UserAuthnKey
+from rhubarb.pkg.redis.rate_limit import rate_limit
+from rhubarb.pkg.users.models import U
+from rhubarb.pkg.webauthn.models import UserAuthnKey
 from rhubarb.crud import by_pk, query
 from starlette.requests import Request
 from webauthn.helpers.structs import (

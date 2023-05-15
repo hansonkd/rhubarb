@@ -9,7 +9,7 @@ The default configuration only logs mutations. This is configurable with `AuditC
 
 ```python
 from rhubarb import Schema
-from rhubarb.contrib.audit.extensions import AuditingExtension
+from rhubarb.pkg.audit.extensions import AuditingExtension
 
 
 schema = Schema(
@@ -27,7 +27,7 @@ Extra events are recorded for login, logout, impersonate, stop_impersonating sep
 
 ## Custom Events
 
-You an save custom Audit events with `rhubarb.contrib.audit.models.log_event`
+You an save custom Audit events with `rhubarb.pkg.audit.models.log_event`
 
 ```python
 await log_event(event_name="my_custom_event", variables={"wow": 1})

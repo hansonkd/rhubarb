@@ -79,7 +79,7 @@ def config_fn():
 Tell Rhubarb where to find your custom config. It can either be the class or the object. If it is a callable or class, it will be initialized into an object on import.
 
 ```bash
-RHUBARB_CONFIG="import_path.to_my.custom_config.CustomConfig" python -m rhubarb.contrib.starlette.server
+RHUBARB_CONFIG="import_path.to_my.custom_config.CustomConfig" python -m rhubarb.pkg.starlette.server
 ```
 
 Access it through `config()` (trying to manually access your config directly through an import will probably cause circular imports)

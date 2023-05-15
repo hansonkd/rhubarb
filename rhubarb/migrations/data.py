@@ -589,7 +589,7 @@ class DropTable(MigrationOperation):
     def forward(self, state: MigrationStateDatabase) -> MigrationStateDatabase:
         tables = copy.copy(state.tables)
         tables.pop((self.schema, self.name))
-        return dataclasses.replace(state, tables=state.tables)
+        return dataclasses.replace(state, tables=tables)
 
     async def run(self, state: MigrationStateDatabase, conn: AsyncConnection):
         await conn.execute(f"DROP TABLE {self.name}")

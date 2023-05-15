@@ -7,7 +7,7 @@ When using production, it can be useful to appear logged in as one of your custo
 The impersonate functions allow superusers to impersonate non-superusers. In order for the impersonate function to work, the superuser must have a current session on the request.
 
 ```python
-from rhubarb.contrib.users.impersonate import (
+from rhubarb.pkg.users.impersonate import (
     impersonate,
     stop_impersonating,
 )

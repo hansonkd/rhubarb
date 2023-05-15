@@ -4,10 +4,10 @@ Rhubarb has built in integrations with Redis for caching, ratelimiting and pubsu
 
 ## General usage
 
-You can get a redis connection from the currently configured pool with `from rhubarb.contrib.redis.connection import connection` and use it like normal.
+You can get a redis connection from the currently configured pool with `from rhubarb.pkg.redis.connection import connection` and use it like normal.
 
 ```python
-from rhubarb.contrib.redis.connection import connection
+from rhubarb.pkg.redis.connection import connection
 
 async def use_redis():
     async with connection() as r:
@@ -20,7 +20,7 @@ async def use_redis():
 Rhubarb has builtin support for caching function results in Redis.
 
 ```python
-from rhubarb.contrib.redis.cache import cache, local_cache, local_only_cache, clear_cache
+from rhubarb.pkg.redis.cache import cache, local_cache, local_only_cache, clear_cache
 
 import aiohttp
 
@@ -62,7 +62,7 @@ Rhubarb has built-in a rate limit context manager and decorator. It is synchroni
 
 ```python
 from starlette.requests import Request
-from rhubarb.contrib.redis.rate_limit import rate_limit
+from rhubarb.pkg.redis.rate_limit import rate_limit
 
 
 # Rate limit by IP. Once a minute.

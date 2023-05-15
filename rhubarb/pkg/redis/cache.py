@@ -6,7 +6,7 @@ from typing import TypeVar, Generic, Callable
 import cachetools
 
 from rhubarb import RhubarbException
-from rhubarb.contrib.redis.connection import connection
+from rhubarb.pkg.redis.connection import connection
 
 
 V = TypeVar("V")

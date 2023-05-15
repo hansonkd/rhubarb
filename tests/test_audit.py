@@ -6,10 +6,10 @@ import pytest_asyncio
 from strawberry.schema.config import StrawberryConfig
 
 from rhubarb import query, Registry
-from rhubarb.contrib.audit.config import AuditConfig
-from rhubarb.contrib.audit.models import AuditEvent, GqlQuery, audit_registry
-from rhubarb.contrib.audit.extensions import AuditingExtension
-from rhubarb.contrib.postgres.connection import override_conn
+from rhubarb.pkg.audit.config import AuditConfig
+from rhubarb.pkg.audit.models import AuditEvent, GqlQuery, audit_registry
+from rhubarb.pkg.audit.extensions import AuditingExtension
+from rhubarb.pkg.postgres.connection import override_conn
 from rhubarb.extension import TransactionalMutationExtension, RhubarbTestingExtension
 from rhubarb.migrations.utils import reset_db_and_fast_forward
 from rhubarb.schema import ErrorRaisingSchema

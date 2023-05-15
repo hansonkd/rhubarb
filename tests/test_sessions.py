@@ -13,24 +13,24 @@ from starlette.applications import Starlette
 from starlette.routing import Route
 
 from rhubarb import Registry, table, get_conn, save, query
-from rhubarb.contrib.audit.config import AuditConfig
-from rhubarb.contrib.audit.extensions import AuditingExtension
-from rhubarb.contrib.audit.models import audit_registry, AuditEvent
-from rhubarb.contrib.postgres.connection import override_conn
-from rhubarb.contrib.sessions.middleware import SessionMiddleware
-from rhubarb.contrib.starlette.asgi import GraphQL
+from rhubarb.pkg.audit.config import AuditConfig
+from rhubarb.pkg.audit.extensions import AuditingExtension
+from rhubarb.pkg.audit.models import audit_registry, AuditEvent
+from rhubarb.pkg.postgres.connection import override_conn
+from rhubarb.pkg.sessions.middleware import SessionMiddleware
+from rhubarb.pkg.starlette.asgi import GraphQL
 
-from rhubarb.contrib.users.backends import login
-from rhubarb.contrib.users.config import UserConfig
-from rhubarb.contrib.users.impersonate import (
+from rhubarb.pkg.users.backends import login
+from rhubarb.pkg.users.config import UserConfig
+from rhubarb.pkg.users.impersonate import (
     impersonate,
     stop_impersonating,
     ImpersonateEvent,
 )
-from rhubarb.contrib.users.middleware import (
+from rhubarb.pkg.users.middleware import (
     SessionAuthenticationMiddleware,
 )
-from rhubarb.contrib.users.models import user_registry, User, get_user
+from rhubarb.pkg.users.models import user_registry, User, get_user
 from rhubarb.extension import RhubarbTestingExtension
 from rhubarb.migrations.utils import reset_db_and_fast_forward
 from rhubarb.schema import ErrorRaisingSchema

@@ -3,7 +3,7 @@ import dataclasses
 from arq import create_pool, ArqRedis
 from arq.connections import RedisSettings
 
-from rhubarb.contrib.redis.config import RedisConfig
+from rhubarb.pkg.redis.config import RedisConfig
 
 
 pools = {}

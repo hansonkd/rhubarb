@@ -1,7 +1,7 @@
 import pytest
 
-from rhubarb.contrib.redis.cache import cache, clear_cache, local_cache, clear_cache_key
-from rhubarb.contrib.redis.rate_limit import rate_limit, RateLimitExceeded
+from rhubarb.pkg.redis.cache import cache, clear_cache, local_cache, clear_cache_key
+from rhubarb.pkg.redis.rate_limit import rate_limit, RateLimitExceeded
 
 
 @rate_limit(key="rate_limited", max_times=10, ttl_seconds=2)

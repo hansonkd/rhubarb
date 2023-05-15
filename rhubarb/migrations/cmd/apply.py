@@ -6,7 +6,7 @@ import os
 import sys
 
 from rhubarb.config import config, init_rhubarb
-from rhubarb.contrib.postgres.connection import connection
+from rhubarb.pkg.postgres.connection import connection
 from rhubarb.migrations.data import MigrationStateDatabase
 from rhubarb.migrations.utils import (
     load_migrations,

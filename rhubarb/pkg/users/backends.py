@@ -5,8 +5,8 @@ import uuid
 
 from psycopg import AsyncConnection
 from rhubarb.config import config
-from rhubarb.contrib.audit.models import log_event
-from rhubarb.contrib.redis.rate_limit import rate_limit
+from rhubarb.pkg.audit.models import log_event
+from rhubarb.pkg.redis.rate_limit import rate_limit
 from starlette.authentication import (
     AuthenticationBackend,
     AuthenticationError,
@@ -15,8 +15,8 @@ from starlette.authentication import (
 from starlette.requests import HTTPConnection
 
 from rhubarb import save, RhubarbException
-from rhubarb.contrib.postgres.connection import connection
-from rhubarb.contrib.users.models import get_user, U
+from rhubarb.pkg.postgres.connection import connection
+from rhubarb.pkg.users.models import get_user, U
 from rhubarb.core import Unset
 
 

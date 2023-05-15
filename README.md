@@ -103,7 +103,7 @@ Currently, Rhubarb only does a few optimizations but they cover most use cases:
 * Combining aggregates if they use same `GROUP BY`
 
 ```python
-from rhubarb.contrib.postgres.connection import connection
+from rhubarb.pkg.postgres.connection import connection
 
 async with connection() as conn:
     res = await schema.execute(
@@ -182,7 +182,7 @@ You can also make queries outside of GQL like a normal ORM for use in general Py
 
 ```python
 from rhubarb import query, Desc
-from rhubarb.contrib.postgres.connection import connection
+from rhubarb.pkg.postgres.connection import connection
 
 async with connection() as conn:
     bool_list: list[bool] = await query(conn, Person).select(lambda x: x.int_is_big()).as_list()

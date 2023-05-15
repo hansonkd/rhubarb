@@ -4,8 +4,8 @@ from psycopg import AsyncConnection
 from starlette.requests import HTTPConnection
 
 from rhubarb import RhubarbException
-from rhubarb.contrib.audit.models import log_event, audit_connection
-from rhubarb.contrib.users.models import U, get_user
+from rhubarb.pkg.audit.models import log_event, audit_connection
+from rhubarb.pkg.users.models import U, get_user
 from rhubarb.core import Unset
 from rhubarb.errors import PermissionDenied
 

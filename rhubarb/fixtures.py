@@ -6,10 +6,10 @@ import pytest
 import pytest_asyncio
 from psycopg import AsyncConnection
 
-from rhubarb.contrib.postgres.connection import connection
+from rhubarb.pkg.postgres.connection import connection
 from rhubarb.config import _program_state, Config, PostgresConfig
-from rhubarb.contrib.redis.config import pools as redis_pools
-from rhubarb.contrib.postgres.config import pools as postgres_pools
+from rhubarb.pkg.redis.config import pools as redis_pools
+from rhubarb.pkg.postgres.config import pools as postgres_pools
 
 
 @pytest_asyncio.fixture()

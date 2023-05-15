@@ -2,7 +2,7 @@ from contextlib import AsyncContextDecorator
 
 from rhubarb import RhubarbException
 from rhubarb.config import config
-from rhubarb.contrib.redis.connection import connection
+from rhubarb.pkg.redis.connection import connection
 
 
 class RateLimitExceeded(RhubarbException):

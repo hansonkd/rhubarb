@@ -1,6 +1,6 @@
 import dataclasses
 
-from rhubarb.contrib.redis.config import RedisConfig, load_redis_config
+from rhubarb.pkg.redis.config import RedisConfig, load_redis_config
 from rhubarb.env import str_env, int_env, bool_env
 
 

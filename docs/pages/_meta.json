@@ -4,7 +4,7 @@
   "tables": "Working with Tables",
   "fields": "Fields and Relations",
   "auth": "User Authentication",
-  "contrib": "Other Integrations",
+  "pkg": "Other Integrations",
   "advanced": "Advanced Usage",
   "github_link": {
     "title": "Github",

@@ -13,8 +13,7 @@ Create a minimal app at `rhubarb-demo/app.py`
 ```python
 import rhubarb
 from rhubarb import Schema, BaseModel, table, column, query, get_conn
-from rhubarb.contrib.starlette.asgi import GraphQL
-from starlette.applications import Starlette
+from rhubarb.pkg.starlette.applications import Starlette, GraphQL
 from starlette.routing import Route
 from strawberry.types import Info
 

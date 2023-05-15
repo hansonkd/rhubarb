@@ -359,10 +359,11 @@ async def fast_forward(
     conn: AsyncConnection,
     current_state: MigrationStateDatabase,
     new_state: MigrationStateDatabase,
-):
+) -> MigrationStateDatabase:
     for op in find_diffs(old_state=current_state, new_state=new_state):
         await op.run(current_state, conn)
         current_state = op.forward(current_state)
+    return current_state
 
 
 async def drop_tables_in_state(conn: AsyncConnection, state: MigrationStateDatabase):

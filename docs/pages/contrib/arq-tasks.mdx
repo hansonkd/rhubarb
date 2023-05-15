@@ -10,7 +10,7 @@ Rhubarb is a light wrapper around `arq` so read the documentation there to under
 Create and register a task with the `@task` decorator.
 
 ```python
-from rhubarb.contrib.arq.worker import task
+from rhubarb.pkg.arq.worker import task
 
 
 @task
@@ -31,7 +31,7 @@ res = await job.result()
 A worker is run using the `arq` command line program. Specify the Rhubarb settings to load all tasks with the `@task` decorator.
 
 ```bash
-poetry run arq rhubarb.contrib.arq.worker.WorkerSettings
+poetry run arq rhubarb.pkg.arq.worker.WorkerSettings
 ```
 
 ## Config

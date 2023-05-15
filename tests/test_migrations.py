@@ -52,8 +52,9 @@ async def test_create_table(postgres_connection):
     assert len(diffs) == 1
     assert isinstance(diffs[0], CreateTable)
     async with postgres_connection.transaction(force_rollback=True):
-        await fast_forward(postgres_connection, EMPTY_STATE, REFERENCE_STATE)
-
+        new_state = await fast_forward(postgres_connection, EMPTY_STATE, REFERENCE_STATE)
+    new_diffs = find_diffs(old_state=REFERENCE_STATE, new_state=new_state)
+    assert len(new_diffs) == 0
 
 @pytest.mark.asyncio
 async def test_drop_table(postgres_connection):
@@ -62,7 +63,9 @@ async def test_drop_table(postgres_connection):
     assert isinstance(diffs[0], DropTable)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, migrations_registry)
-        await fast_forward(postgres_connection, REFERENCE_STATE, EMPTY_STATE)
+        new_state = await fast_forward(postgres_connection, REFERENCE_STATE, EMPTY_STATE)
+    new_diffs = find_diffs(old_state=EMPTY_STATE, new_state=new_state)
+    assert len(new_diffs) == 0
 
 
 @pytest.mark.asyncio
@@ -81,7 +84,9 @@ async def test_change_type(postgres_connection):
     assert isinstance(diffs[0].alter_operations[0], AlterTypeUsing)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, migrations_registry)
-        await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+        after_state = await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+    new_diffs = find_diffs(old_state=new_state, new_state=after_state)
+    assert len(new_diffs) == 0
 
 
 @pytest.mark.asyncio
@@ -107,7 +112,9 @@ async def test_change_default(postgres_connection):
     assert isinstance(diffs[0].alter_operations[0], SetDefault)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, first_registry)
-        await fast_forward(postgres_connection, old_state, new_state)
+        after_state = await fast_forward(postgres_connection, old_state, new_state)
+    new_diffs = find_diffs(old_state=new_state, new_state=after_state)
+    assert len(new_diffs) == 0
 
     diffs = find_diffs(old_state=new_state, new_state=old_state)
     assert len(diffs) == 1
@@ -116,7 +123,9 @@ async def test_change_default(postgres_connection):
     assert isinstance(diffs[0].alter_operations[0], DropDefault)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, changed_registry)
-        await fast_forward(postgres_connection, new_state, old_state)
+        after_state = await fast_forward(postgres_connection, new_state, old_state)
+    new_diffs = find_diffs(old_state=old_state, new_state=after_state)
+    assert len(new_diffs) == 0
 
 
 @pytest.mark.asyncio
@@ -136,7 +145,9 @@ async def test_add(postgres_connection):
     assert isinstance(diffs[0].alter_operations[0], CreateColumn)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, migrations_registry)
-        await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+        after_state = await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+    new_diffs = find_diffs(old_state=new_state, new_state=after_state)
+    assert len(new_diffs) == 0
 
 
 @pytest.mark.asyncio
@@ -156,7 +167,9 @@ async def test_drop_and_add(postgres_connection):
     assert isinstance(diffs[0].alter_operations[0], CreateColumn)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, migrations_registry)
-        await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+        after_state = await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+    new_diffs = find_diffs(old_state=new_state, new_state=after_state)
+    assert len(new_diffs) == 0
 
 
 @pytest.mark.asyncio
@@ -178,7 +191,9 @@ async def test_add_constraint(postgres_connection):
     assert isinstance(diffs[0].alter_operations[0], AddConstraint)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, migrations_registry)
-        await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+        after_state = await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+    new_diffs = find_diffs(old_state=new_state, new_state=after_state)
+    assert len(new_diffs) == 0
 
 
 @pytest.mark.asyncio
@@ -198,7 +213,9 @@ async def test_add_index(postgres_connection):
     assert isinstance(diffs[0], AddIndex)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, migrations_registry)
-        await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+        after_state = await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+    new_diffs = find_diffs(old_state=new_state, new_state=after_state)
+    assert len(new_diffs) == 0
 
 
 @pytest.mark.asyncio
@@ -218,7 +235,9 @@ async def test_delete_index(postgres_connection):
     assert isinstance(diffs[0], DropIndex)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, changed_registry)
-        await fast_forward(postgres_connection, new_state, REFERENCE_STATE)
+        after_state = await fast_forward(postgres_connection, new_state, REFERENCE_STATE)
+    new_diffs = find_diffs(old_state=REFERENCE_STATE, new_state=after_state)
+    assert len(new_diffs) == 0
 
 
 @pytest.mark.asyncio
@@ -240,7 +259,9 @@ async def test_drop_constraint(postgres_connection):
     assert isinstance(diffs[0].alter_operations[0], DropConstraint)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, changed_registry)
-        await fast_forward(postgres_connection, new_state, REFERENCE_STATE)
+        after_state = await fast_forward(postgres_connection, new_state, REFERENCE_STATE)
+    new_diffs = find_diffs(old_state=REFERENCE_STATE, new_state=after_state)
+    assert len(new_diffs) == 0
 
 
 @pytest.mark.asyncio
@@ -267,7 +288,9 @@ async def test_add_fk(postgres_connection):
     assert isinstance(diffs[1].alter_operations[0], AddReferencesConstraint)
     async with postgres_connection.transaction(force_rollback=True):
         await reset_db_and_fast_forward(postgres_connection, migrations_registry)
-        await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+        after_state = await fast_forward(postgres_connection, REFERENCE_STATE, new_state)
+    new_diffs = find_diffs(old_state=new_state, new_state=after_state)
+    assert len(new_diffs) == 0
 
 
 @pytest.mark.asyncio

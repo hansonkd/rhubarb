@@ -1,6 +1,6 @@
 import dataclasses
 
-from rhubarb.contrib.postgres.config import PostgresConfig, load_postgres_config
+from rhubarb.pkg.postgres.config import PostgresConfig, load_postgres_config
 
 
 @dataclasses.dataclass(frozen=True)

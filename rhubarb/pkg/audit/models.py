@@ -17,8 +17,8 @@ from rhubarb import (
     relation,
 )
 from rhubarb.config import config
-from rhubarb.contrib.postgres.connection import connection
-from rhubarb.contrib.redis.cache import local_only_cache
+from rhubarb.pkg.postgres.connection import connection
+from rhubarb.pkg.redis.cache import local_only_cache
 from rhubarb.core import SqlModel
 from rhubarb.crud import by_pk
 from rhubarb.object_set import BUILTINS

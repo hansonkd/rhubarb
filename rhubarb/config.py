@@ -7,16 +7,16 @@ from typing import TypeVar
 
 from cachetools import TTLCache, Cache
 
-from rhubarb.contrib.arq.config import ArqConfig
-from rhubarb.contrib.starlette.config import CorsConfig
+from rhubarb.pkg.arq.config import ArqConfig
+from rhubarb.pkg.starlette.config import CorsConfig
 
-from rhubarb.contrib.email.config import EmailConfig
-from rhubarb.contrib.postgres.config import PostgresConfig, load_postgres_config
-from rhubarb.contrib.redis.config import RedisConfig, load_redis_config
-from rhubarb.contrib.users.config import UserConfig
-from rhubarb.contrib.sessions.config import SessionConfig
-from rhubarb.contrib.audit.config import AuditConfig
-from rhubarb.contrib.webauthn.config import WebAuthnConfig
+from rhubarb.pkg.email.config import EmailConfig
+from rhubarb.pkg.postgres.config import PostgresConfig, load_postgres_config
+from rhubarb.pkg.redis.config import RedisConfig, load_redis_config
+from rhubarb.pkg.users.config import UserConfig
+from rhubarb.pkg.sessions.config import SessionConfig
+from rhubarb.pkg.audit.config import AuditConfig
+from rhubarb.pkg.webauthn.config import WebAuthnConfig
 from rhubarb.errors import RhubarbException
 from rhubarb.migrations.utils import run_migration_checks
 from rhubarb.object_set import Registry, DEFAULT_REGISTRY

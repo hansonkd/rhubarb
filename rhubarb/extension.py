@@ -7,7 +7,7 @@ from strawberry.field import StrawberryField
 from strawberry.types import Info
 from strawberry.types.graphql import OperationType
 
-from rhubarb.contrib.postgres.connection import connection, override_conn
+from rhubarb.pkg.postgres.connection import connection, override_conn
 from rhubarb.object_set import (
     pk_concrete,
     ObjectSet,
