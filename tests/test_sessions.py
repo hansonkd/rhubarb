@@ -18,7 +18,7 @@ from rhubarb.pkg.audit.extensions import AuditingExtension
 from rhubarb.pkg.audit.models import audit_registry, AuditEvent
 from rhubarb.pkg.postgres.connection import override_conn
 from rhubarb.pkg.sessions.middleware import SessionMiddleware
-from rhubarb.pkg.starlette.asgi import GraphQL
+from rhubarb.pkg.starlette.applications import GraphQL
 
 from rhubarb.pkg.users.backends import login
 from rhubarb.pkg.users.config import UserConfig
