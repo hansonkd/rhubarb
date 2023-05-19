@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "rhubarb"
+name = "rhubarb-graphql"
 version = "0.1.0"
 description = "Rhubarb is an experimental ORM baked from scratch focused on automatic optimizations with Postgres data using GQL."
 authors = ["Kyle Hanson <me@khanson.io>"]
@@ -7,6 +7,7 @@ readme = "README.md"
 license = "MIT"
 repository = "https://github.com/hansonkd/rhubarb/"
 homepage = "https://www.rhubarb.rocks"
+packages = [{ include = "rhubarb" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"
