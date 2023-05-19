@@ -1,1 +1,1 @@
-npx next export -o ../docs/
+npx next build && npx next export -o ../docs/ && touch ../docs/.nojekyll && echo "www.rhubarb.rocks" >> ../docs/CNAME
