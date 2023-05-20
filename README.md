@@ -2,6 +2,8 @@
 
 Rhubarb is an experimental ORM baked from scratch focused on automatic optimizations with Postgres data using GQL.
 
+Docs at [www.rhubarb.rocks](www.rhubarb.rocks)
+
 <img width="653" alt="Screenshot 2023-05-03 at 2 32 48 AM" src="https://user-images.githubusercontent.com/496914/235881083-f47d21ff-2462-46f9-acc2-e900316fe05f.png">
 
 *Strawberry-Rhubarb Pie... Tasty!*

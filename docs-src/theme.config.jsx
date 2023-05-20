@@ -3,5 +3,6 @@ export default {
   project: {
     link: 'https://github.com/hansonkd/rhubarb',
   },
+  docsRepositoryBase: 'https://github.com/hansonkd/rhubarb'
   // ...
 }
