@@ -1,0 +1,13 @@
+# Starlette and FastAPI
+
+You can run Rhubarb using starlette or including it in your FastAPI app.
+
+## Example
+
+```
+from rhubarb.pkg.starlette.applications import Starlette, Route, GraphQL
+
+app = Starlette(
+    routes=[Route("/graphql/", GraphQL(schema, debug=True))],
+)
+```
